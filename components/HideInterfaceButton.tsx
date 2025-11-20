@@ -45,7 +45,6 @@ const HideInterfaceButton: React.FC<HideInterfaceButtonProps> = ({ isHidden, onP
                 userSelect: 'none',
             }}
         >
-            {/* Eye Icon - Simple and minimal */}
             <svg
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"

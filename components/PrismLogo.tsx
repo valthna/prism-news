@@ -21,20 +21,20 @@ const PrismLogo: React.FC<PrismLogoProps> = ({
     };
 
     const logoSrc = {
-        full: '/logo.png',
-        square: '/logo-square.png',
-        favicon: '/favicon.png'
+        full: '/logo-square.svg',
+        square: '/logo-square.svg',
+        favicon: '/favicon.svg'
     };
 
-    // Pour le variant 'full' avec l'effet chromatic aberration en CSS si pas d'image
     if (variant === 'full' && showText) {
         return (
             <div className={`inline-flex items-center gap-3 ${className}`}>
-                <img
-                    src={logoSrc[variant]}
-                    alt="PRISM Logo"
-                    className={`${sizeClasses[size]} w-auto object-contain`}
-                />
+                <span
+                    className={`${sizeClasses[size]} flex items-center font-black italic tracking-tight chromatic-aberration`}
+                    data-text="PRISM"
+                >
+                    PRISM
+                </span>
             </div>
         );
     }

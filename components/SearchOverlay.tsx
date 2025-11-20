@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { SearchIcon } from './icons/SearchIcon';
 import { CloseIcon } from './icons/CloseIcon';
@@ -46,17 +45,12 @@ const SearchOverlay: React.FC<SearchOverlayProps> = ({ isOpen, onClose, onSearch
 
     return (
         <div className={`fixed inset-0 z-[60] flex items-start justify-center pt-[15vh] px-4 transition-all duration-500 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-
-            {/* Backdrop */}
             <div
                 className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-500"
                 onClick={onClose}
             ></div>
 
-            {/* Modal Content (Command Palette Style) */}
             <div className={`relative w-full max-w-2xl glass-panel rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden transform transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1) ${isOpen ? 'scale-100 translate-y-0' : 'scale-95 translate-y-4'}`}>
-
-                {/* Header / Close */}
                 <div className="absolute top-4 right-4 z-10">
                     <button onClick={onClose} className="p-2 rounded-full hover:bg-white/10 transition-colors group">
                         <CloseIcon className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
@@ -64,8 +58,6 @@ const SearchOverlay: React.FC<SearchOverlayProps> = ({ isOpen, onClose, onSearch
                 </div>
 
                 <div className="p-8 space-y-8">
-
-                    {/* Search Input (Massive & Clean) */}
                     <form onSubmit={handleSubmit} className="relative group">
                         <div className="absolute inset-y-0 left-0 flex items-center pointer-events-none">
                             <SearchIcon className="h-8 w-8 text-gray-500 group-focus-within:text-neon-accent transition-colors duration-300" />
@@ -80,7 +72,6 @@ const SearchOverlay: React.FC<SearchOverlayProps> = ({ isOpen, onClose, onSearch
                         />
                     </form>
 
-                    {/* Categories */}
                     <div className="space-y-4">
                         <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em]">Explorer par catégorie</label>
                         <div className="flex flex-wrap gap-2">
@@ -99,7 +90,6 @@ const SearchOverlay: React.FC<SearchOverlayProps> = ({ isOpen, onClose, onSearch
                         </div>
                     </div>
 
-                    {/* Action Button */}
                     <div className="flex justify-end pt-4">
                         <button
                             onClick={handleSubmit}
@@ -109,7 +99,6 @@ const SearchOverlay: React.FC<SearchOverlayProps> = ({ isOpen, onClose, onSearch
                             <SearchIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
                         </button>
                     </div>
-
                 </div>
             </div>
         </div>

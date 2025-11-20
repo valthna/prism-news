@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Sentiment, UserComment } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
 import { SendIcon } from './icons/SendIcon';
 
 interface SentimentModalProps {
-  sentiment: Sentiment; // AI Original Summary
+  sentiment: Sentiment;
   comments: UserComment[];
   onAddComment: (comment: UserComment) => void;
   onClose: () => void;
@@ -16,7 +15,6 @@ const SentimentModal: React.FC<SentimentModalProps> = ({ sentiment, comments, on
   const [text, setText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Calcul dynamique de la tendance
   const totalComments = comments.length;
   const positiveCount = comments.filter(c => c.sentiment === 'positive').length;
   const negativeCount = comments.filter(c => c.sentiment === 'negative').length;
@@ -41,7 +39,6 @@ const SentimentModal: React.FC<SentimentModalProps> = ({ sentiment, comments, on
       setText('');
       setInputMode('neutral');
       
-      // Scroll to new message
       setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }, 100);
@@ -56,7 +53,6 @@ const SentimentModal: React.FC<SentimentModalProps> = ({ sentiment, comments, on
         className="bg-[#121212] border border-white/10 sm:rounded-3xl w-full max-w-2xl h-full sm:h-[85vh] relative text-white shadow-2xl animate-slide-up overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="flex-shrink-0 p-5 border-b border-white/10 bg-[#121212] z-10 relative">
              <div className="flex justify-between items-center mb-4">
                 <div>
@@ -71,7 +67,6 @@ const SentimentModal: React.FC<SentimentModalProps> = ({ sentiment, comments, on
                 </button>
             </div>
 
-            {/* Dynamic Trend Bar */}
             <div className="relative h-4 bg-gray-800 rounded-full overflow-hidden flex shadow-inner ring-1 ring-white/10">
                 <div 
                     className="bg-gradient-to-r from-green-600 to-green-500 transition-all duration-500 flex items-center justify-start pl-2" 
@@ -80,12 +75,11 @@ const SentimentModal: React.FC<SentimentModalProps> = ({ sentiment, comments, on
                     {posPercent > 10 && <span className="text-[9px] font-black text-green-950">{posPercent}%</span>}
                 </div>
                 <div 
-                    className="bg-gradient-to-l from-red-600 to-red-500 transition-all duration-500 flex items-center justify-end pr-2" 
+                    className="bg-gradient-to-l from-red-600 to-red-500 transition-all duration-500 flex items=center justify-end pr-2" 
                     style={{ width: `${negPercent}%` }}
                 >
                      {negPercent > 10 && <span className="text-[9px] font-black text-red-950">{negPercent}%</span>}
                 </div>
-                {/* Center Icon */}
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 bg-[#121212] rounded-full flex items-center justify-center border border-white/20 shadow-lg">
                     <span className="text-[10px]">VS</span>
                 </div>
@@ -96,10 +90,7 @@ const SentimentModal: React.FC<SentimentModalProps> = ({ sentiment, comments, on
             </div>
         </div>
 
-        {/* Scrollable Content */}
         <div className="flex-grow overflow-y-auto p-4 space-y-6 bg-[#0a0a0a]">
-            
-            {/* Featured AI Summary (Mini Cards) */}
             <div className="grid grid-cols-2 gap-3 mb-6">
                 <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-3">
                     <div className="text-[10px] font-bold text-green-400 uppercase mb-1">Top Positif</div>
@@ -130,7 +121,7 @@ const SentimentModal: React.FC<SentimentModalProps> = ({ sentiment, comments, on
                                 </div>
                                 <div className="mt-1 ml-1 flex items-center gap-3">
                                      <button className="text-[10px] text-gray-500 hover:text-white font-bold">J'aime ({comment.likes})</button>
-                                     <button className="text-[10px] text-gray-500 hover:text-white font-bold">Répondre</button>
+                                     <button className="text-[10px] text-gray-500 hover=text-white font-bold">Répondre</button>
                                 </div>
                             </div>
                         </div>
@@ -140,7 +131,6 @@ const SentimentModal: React.FC<SentimentModalProps> = ({ sentiment, comments, on
             </div>
         </div>
 
-        {/* Input Footer */}
         <div className="flex-shrink-0 p-4 bg-[#121212] border-t border-white/10">
             {!text && inputMode === 'neutral' ? (
                 <div className="grid grid-cols-2 gap-3">

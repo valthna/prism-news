@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { ThumbsUpIcon } from './icons/ThumbsUpIcon';
 import { ShareIcon } from './icons/ShareIcon';
@@ -100,11 +99,9 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
 
     const handleReaction = (r: typeof reactions[0]) => {
         if (selectedReaction?.id === r.id) {
-            // Toggle off
             setSelectedReaction(null);
             setReactionCount(prev => prev - 1);
         } else {
-            // New reaction
             if (!selectedReaction) setReactionCount(prev => prev + 1);
             setSelectedReaction(r);
             setAnimateReaction(true);
@@ -123,13 +120,11 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
     const handleMouseLeave = () => {
         hoverTimeoutRef.current = setTimeout(() => {
             setShowReactions(false);
-        }, 300); // 300ms delay to allow moving to the dock
+        }, 300);
     };
 
     return (
         <div className={`flex ${isRow ? 'flex-row' : 'flex-col'} items-center gap-4 relative z-40 ${className}`}>
-
-            {/* Animated Flying Particles Effect */}
             {animateReaction && selectedReaction && (
                 <div className="absolute bottom-16 right-0 z-50 pointer-events-none w-full flex justify-center">
                     <div className="relative">
@@ -146,17 +141,14 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                 </div>
             )}
 
-            {/* Sentiment/Debate Button */}
             <ActionButton label="DÉBAT" onClick={onShowSentiment}>
                 <OpinionIcon className="w-6 h-6" />
             </ActionButton>
 
-            {/* Reaction Button Container */}
             <div className="relative flex flex-col items-center"
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
             >
-                {/* The Dock */}
                 <div className={`
                     absolute bottom-full mb-2 
                     ${isRow ? 'left-1/2 -translate-x-1/2' : 'right-0 origin-bottom-right'}
@@ -168,7 +160,6 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                     ${showReactions ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-75 translate-y-4 pointer-events-none'}
                     z-50
                 `}>
-                    {/* Invisible Bridge to prevent mouse leave when moving from button to dock */}
                     <div className="absolute top-full left-0 w-full h-4 bg-transparent"></div>
 
                     {reactions.map((r) => (
@@ -184,7 +175,6 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                             `}>
                                 {r.emoji}
                             </span>
-                            {/* Tooltip */}
                             <span className={`
                                 absolute -top-8 left-1/2 -translate-x-1/2 
                                 text-[10px] font-bold uppercase tracking-wider 

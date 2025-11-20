@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, FormEvent } from 'react';
 import { GoogleGenAI, Chat } from '@google/genai';
 import { NewsArticle, ChatMessage } from '../types';
@@ -90,21 +89,16 @@ const Chatbot: React.FC<{ isOpen: boolean, onClose: () => void, article: NewsArt
 
     return (
         <div className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center pointer-events-none">
-            {/* Backdrop */}
             <div
                 className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto animate-fade-in cursor-pointer"
                 onClick={onClose}
             >
-                {/* Tap to close hint */}
                 <div className="absolute top-8 left-1/2 -translate-x-1/2 px-4 py-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-full">
                     <span className="text-[11px] font-medium text-white/80 uppercase tracking-wider">Tap pour fermer</span>
                 </div>
             </div>
 
-            {/* Main Window */}
             <div className="pointer-events-auto w-full sm:max-w-md h-[85vh] sm:h-[600px] bg-[#121212] sm:rounded-3xl rounded-t-3xl shadow-2xl border border-white/10 flex flex-col overflow-hidden animate-slide-up relative">
-
-                {/* Header - More compact */}
                 <header className="p-3 border-b border-white/10 bg-[#121212]/90 backdrop-blur flex justify-between items-center">
                     <div className="flex items-center gap-2">
                         <div className="w-1.5 h-1.5 bg-neon-accent rounded-full animate-pulse"></div>
@@ -115,7 +109,6 @@ const Chatbot: React.FC<{ isOpen: boolean, onClose: () => void, article: NewsArt
                     </button>
                 </header>
 
-                {/* Messages Area */}
                 <div className="flex-1 overflow-y-auto pt-4 pb-4 px-4 space-y-4 bg-[#0a0a0a]">
                     {messages.map((msg, i) => (
                         <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -139,7 +132,6 @@ const Chatbot: React.FC<{ isOpen: boolean, onClose: () => void, article: NewsArt
                     <div ref={messagesEndRef} />
                 </div>
 
-                {/* Input Area */}
                 <div className="p-4 bg-[#121212] border-t border-white/10">
                     <form onSubmit={handleSendMessage} className="relative">
                         <input

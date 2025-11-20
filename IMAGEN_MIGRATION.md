@@ -15,12 +15,12 @@
 
 ### 3. **NewsCard** (`/components/NewsCard.tsx`)
 - Style de prompt adapté aux caricatures
-- Fallback robuste vers Pollinations en cas d'échec
+- Fallback robuste vers Pollinations en cas d’échec
 - Format optimisé : 1920x1080 (16:9)
 
 ## Fonctionnement
 
-1. **Gemini génère l'analyse** (texte, sources, headlines)
+1. **Gemini génère l’analyse** (texte, sources, headlines)
 2. **Gemini Image génère les caricatures** en parallèle pour chaque article
 3. Les images sont intégrées comme `base64 data URLs`
 4. Si échec : **Pollinations prend le relais** automatiquement

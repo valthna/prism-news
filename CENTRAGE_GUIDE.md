@@ -222,50 +222,6 @@ Centrage avec animation au hover (effet zoom subtil).
 
 ---
 
-## 🚀 Migration depuis l'existant
-
-### Avant (ActionButtons.tsx - lignes 27-31)
-```jsx
-<div className={`
-  relative p-3.5 rounded-2xl 
-  min-w-[48px] min-h-[48px]
-  flex items-center justify-center  // ❌ Peut être simplifié
-  ...
-`}>
-```
-
-### Après (avec .center-perfect)
-```jsx
-<div className={`
-  center-perfect  // ✅ Plus simple et clair
-  relative p-3.5 rounded-2xl 
-  min-w-[48px] min-h-[48px]
-  ...
-`}>
-```
-
----
-
-## 📚 Référence Technique
-
-### CSS Grid - `place-items: center`
-- **Avantages :** 
-  - 1 ligne de code vs 3+ avec flexbox/absolute
-  - Performance optimale
-  - Support moderne (IE11+ non supporté, mais OK pour PRISM)
-  
-### Flexbox - `justify-content: center` + `align-items: center`
-- **Avantages :**
-  - Compatible avec layouts flex existants
-  - Support de `gap`, `flex-wrap`, etc.
-
-### Position Absolute - `top: 50%` + `left: 50%` + `transform: translate(-50%, -50%)`
-- **Avantages :**
-  - Parfait pour overlays
-  - Ne dépend pas du display du parent
-
----
-
 ## 💡 Exemple COMPLET : Logo PRISM avec effet Glitch
 
 ```jsx

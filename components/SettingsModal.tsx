@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { CloseIcon } from './icons/CloseIcon';
 import { ChevronRightIcon } from './icons/ChevronRightIcon';
@@ -50,17 +51,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [dataSaver, setDataSaver] = useState(false);
   const [autoPlay, setAutoPlay] = useState(true);
   const [highContrast, setHighContrast] = useState(false);
-  const [textSize, setTextSize] = useState(100);
+  const [textSize, setTextSize] = useState(100); // Percentage
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center sm:items-end sm:justify-center pointer-events-none">
+        {/* Backdrop */}
         <div 
             className="absolute inset-0 bg-black/80 backdrop-blur-md pointer-events-auto animate-fade-in"
             onClick={onClose}
         />
 
+        {/* Modal Container */}
         <div className="pointer-events-auto w-full sm:max-w-md h-full sm:h-[85vh] bg-[#121212] sm:rounded-t-3xl flex flex-col shadow-2xl animate-slide-up overflow-hidden ring-1 ring-white/10">
             
+            {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-white/10 bg-[#121212]/80 backdrop-blur-md z-10">
                 <h2 className="text-xl font-black tracking-tight text-white">Réglages</h2>
                 <button 
@@ -71,7 +75,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 </button>
             </div>
 
+            {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto p-5 pb-20 custom-scrollbar">
+                
+                {/* Profile Card */}
                 <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-white/5 to-white/10 rounded-2xl border border-white/10 mb-6">
                     <div className="w-14 h-14 rounded-full bg-neon-accent flex items-center justify-center text-black font-black text-xl shadow-lg shadow-neon-accent/20">
                         A
@@ -85,6 +92,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </button>
                 </div>
 
+                {/* Section: Préférences de Contenu */}
                 <SectionHeader title="Contenu & IA" />
                 <div className="flex flex-col rounded-2xl overflow-hidden bg-white/5 border border-white/5">
                     <SettingRow label="Région et Langue" subLabel="France (Français)">
@@ -100,6 +108,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </SettingRow>
                 </div>
 
+                {/* Section: Apparence */}
                 <SectionHeader title="Apparence & Lecture" />
                 <div className="flex flex-col rounded-2xl overflow-hidden bg-white/5 border border-white/5">
                     <div className="p-4 border-b border-white/5">
@@ -131,6 +140,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </SettingRow>
                 </div>
 
+                {/* Section: Notifications */}
                 <SectionHeader title="Notifications" />
                 <div className="flex flex-col rounded-2xl overflow-hidden bg-white/5 border border-white/5">
                     <SettingRow label="Alertes Info (Push)">
@@ -141,6 +151,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </SettingRow>
                 </div>
 
+                {/* Section: Système */}
                 <SectionHeader title="Système" />
                 <div className="flex flex-col rounded-2xl overflow-hidden bg-white/5 border border-white/5">
                     <SettingRow label="Vider le cache" onClick={() => alert('Cache vidé')}>
@@ -158,4 +169,34 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 </div>
 
                 <div className="mt-8 text-center">
-                    <p className="text-[10px] text-gray-600 font-mono">PRISM v1.2.0 (Build 892)
+                    <p className="text-[10px] text-gray-600 font-mono">PRISM v1.2.0 (Build 892)</p>
+                    <p className="text-[10px] text-gray-700 mt-1">Designed with AI</p>
+                </div>
+
+            </div>
+        </div>
+
+        <style>{`
+            input[type=range]::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                height: 16px;
+                width: 16px;
+                border-radius: 50%;
+                background: #ffffff;
+                cursor: pointer;
+                margin-top: -6px;
+                box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            }
+            input[type=range]::-webkit-slider-runnable-track {
+                width: 100%;
+                height: 4px;
+                cursor: pointer;
+                background: rgba(255,255,255,0.2);
+                border-radius: 2px;
+            }
+        `}</style>
+    </div>
+  );
+};
+
+export default SettingsModal;

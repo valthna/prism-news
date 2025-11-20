@@ -1,0 +1,258 @@
+
+import React, { useState, useEffect } from 'react';
+import { ThumbsUpIcon } from './icons/ThumbsUpIcon';
+import { ShareIcon } from './icons/ShareIcon';
+import { NewsArticle } from '../types';
+
+// Icône "Avis/Debate"
+const OpinionIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+    </svg>
+);
+
+const ActionButton: React.FC<{
+    children: React.ReactNode,
+    label: string,
+    onClick?: () => void,
+    extraClass?: string,
+    activeColor?: string,
+    counter?: number
+}> = ({ children, label, onClick, extraClass = "", activeColor, counter }) => (
+    <button
+        onClick={onClick}
+        className={`flex flex-col items-center text-white space-y-2 group disabled:opacity-50 relative ${extraClass}`}
+        disabled={!onClick}
+    >
+        <div className="relative">
+            <div className={`
+                center-perfect 
+                relative p-3.5 rounded-2xl 
+                min-w-[48px] min-h-[48px]
+                bg-white/10 backdrop-blur-xl 
+                border border-white/20 
+                shadow-[0_8px_24px_rgba(0,0,0,0.4)] 
+                group-hover:bg-white/20 group-hover:border-white/40 
+                group-hover:shadow-[0_12px_32px_rgba(0,0,0,0.5)]
+                group-active:scale-90 
+                transition-all duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)
+                overflow-hidden
+                ${activeColor ? `shadow-[0_0_24px_${activeColor}] border-${activeColor}/60` : ''}
+            `}>
+                {/* Inner Shine */}
+                <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+
+                {/* Active Glow Background */}
+                {activeColor && (
+                    <div className={`absolute inset-0 opacity-25 bg-${activeColor} blur-md`}></div>
+                )}
+
+                {/* Content */}
+                <div className={`relative z-10 transition-all duration-300 ${activeColor ? 'text-white scale-105' : 'group-hover:text-neon-accent group-hover:scale-105'}`}>
+                    {children}
+                </div>
+            </div>
+
+            {/* Counter Badge - Absolute Positioned for Alignment */}
+            {counter !== undefined && (
+                <div className="absolute -top-2 -right-2 bg-white text-black text-[10px] font-bold px-2 py-1 rounded-full shadow-xl border border-black/10 transform scale-0 group-hover:scale-100 transition-transform duration-200 z-20 min-w-[20px] text-center">
+                    {counter}
+                </div>
+            )}
+        </div>
+
+        <div className="flex flex-col items-center">
+            <span className="text-[10px] font-black uppercase tracking-[0.15em] text-gray-300 group-hover:text-white transition-colors duration-200">
+                {label}
+            </span>
+        </div>
+    </button>
+);
+
+interface ActionButtonsProps {
+    article: Pick<NewsArticle, 'headline' | 'summary'>;
+    onShowSentiment: () => void;
+    className?: string;
+}
+
+const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment, className = "" }) => {
+    const [showReactions, setShowReactions] = useState(false);
+    const [selectedReaction, setSelectedReaction] = useState<{ emoji: string, label: string, color: string } | null>(null);
+    const [animateReaction, setAnimateReaction] = useState(false);
+    const [reactionCount, setReactionCount] = useState(0);
+    const [isShaking, setIsShaking] = useState(false);
+    const hoverTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+    const isRow = className.includes('flex-row');
+
+    // Initialize random count for demo purposes
+    useEffect(() => {
+        setReactionCount(Math.floor(Math.random() * 200) + 42);
+    }, []);
+
+    const reactions = [
+        { emoji: '🔥', label: 'Top', id: 'fire', color: 'text-orange-500', glow: 'orange-500' },
+        { emoji: '🤯', label: 'Choc', id: 'shock', color: 'text-purple-400', glow: 'purple-500' },
+        { emoji: '🤔', label: 'Doute', id: 'doubt', color: 'text-yellow-400', glow: 'yellow-500' },
+        { emoji: '😡', label: 'Colère', id: 'angry', color: 'text-red-500', glow: 'red-500' },
+        { emoji: '👏', label: 'Bravo', id: 'clap', color: 'text-green-400', glow: 'green-500' },
+    ];
+
+    const handleReaction = (r: typeof reactions[0]) => {
+        if (selectedReaction?.id === r.id) {
+            // Toggle off
+            setSelectedReaction(null);
+            setReactionCount(prev => prev - 1);
+        } else {
+            // New reaction
+            if (!selectedReaction) setReactionCount(prev => prev + 1);
+            setSelectedReaction(r);
+            setAnimateReaction(true);
+            setIsShaking(true);
+            setTimeout(() => setAnimateReaction(false), 1000);
+            setTimeout(() => setIsShaking(false), 300);
+        }
+        setShowReactions(false);
+    };
+
+    const handleMouseEnter = () => {
+        if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+        setShowReactions(true);
+    };
+
+    const handleMouseLeave = () => {
+        hoverTimeoutRef.current = setTimeout(() => {
+            setShowReactions(false);
+        }, 300); // 300ms delay to allow moving to the dock
+    };
+
+    return (
+        <div className={`flex ${isRow ? 'flex-row' : 'flex-col'} items-center gap-4 relative z-40 ${className}`}>
+
+            {/* Animated Flying Particles Effect */}
+            {animateReaction && selectedReaction && (
+                <div className="absolute bottom-16 right-0 z-50 pointer-events-none w-full flex justify-center">
+                    <div className="relative">
+                        <span className="absolute text-4xl animate-float-main filter drop-shadow-lg">
+                            {selectedReaction.emoji}
+                        </span>
+                        <span className="absolute text-2xl animate-float-left opacity-0 delay-75">
+                            {selectedReaction.emoji}
+                        </span>
+                        <span className="absolute text-2xl animate-float-right opacity-0 delay-100">
+                            {selectedReaction.emoji}
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            {/* Sentiment/Debate Button */}
+            <ActionButton label="DÉBAT" onClick={onShowSentiment}>
+                <OpinionIcon className="w-6 h-6" />
+            </ActionButton>
+
+            {/* Reaction Button Container */}
+            <div className="relative flex flex-col items-center"
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+            >
+                {/* The Dock */}
+                <div className={`
+                    absolute bottom-full mb-2 
+                    ${isRow ? 'left-1/2 -translate-x-1/2' : 'right-0 origin-bottom-right'}
+                    flex items-center gap-1 p-2 
+                    bg-black/60 backdrop-blur-2xl 
+                    rounded-full border border-white/10 
+                    shadow-[0_8px_32px_rgba(0,0,0,0.5)] 
+                    transition-all duration-300 origin-bottom
+                    ${showReactions ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-75 translate-y-4 pointer-events-none'}
+                    z-50
+                `}>
+                    {/* Invisible Bridge to prevent mouse leave when moving from button to dock */}
+                    <div className="absolute top-full left-0 w-full h-4 bg-transparent"></div>
+
+                    {reactions.map((r) => (
+                        <button
+                            key={r.id}
+                            onClick={() => handleReaction(r)}
+                            className="group/emoji relative p-2 rounded-full hover:bg-white/10 transition-all duration-200"
+                        >
+                            <span className={`
+                                block text-2xl transform transition-transform duration-200 cubic-bezier(0.34, 1.56, 0.64, 1)
+                                group-hover/emoji:scale-150 group-hover/emoji:-translate-y-1
+                                ${selectedReaction?.id === r.id ? 'scale-125' : ''}
+                            `}>
+                                {r.emoji}
+                            </span>
+                            {/* Tooltip */}
+                            <span className={`
+                                absolute -top-8 left-1/2 -translate-x-1/2 
+                                text-[10px] font-bold uppercase tracking-wider 
+                                bg-black px-2 py-1 rounded text-white 
+                                opacity-0 group-hover/emoji:opacity-100 
+                                transition-opacity duration-200 pointer-events-none
+                                whitespace-nowrap
+                            `}>
+                                {r.label}
+                            </span>
+                        </button>
+                    ))}
+                </div>
+
+                <div className={`${isShaking ? 'animate-shake' : ''}`}>
+                    <ActionButton
+                        label={selectedReaction ? "VOTÉ" : "RÉAGIR"}
+                        onClick={() => setShowReactions(!showReactions)}
+                        activeColor={selectedReaction?.glow}
+                        counter={reactionCount}
+                    >
+                        <div className={`transform transition-transform duration-300 ${animateReaction ? 'scale-125' : ''}`}>
+                            {selectedReaction ? (
+                                <span className="text-xl leading-none filter drop-shadow-glow animate-pop-in">
+                                    {selectedReaction.emoji}
+                                </span>
+                            ) : (
+                                <ThumbsUpIcon className="w-6 h-6" />
+                            )}
+                        </div>
+                    </ActionButton>
+                </div>
+            </div>
+
+            <style>{`
+                @keyframes float-main {
+                    0% { transform: translateY(0) scale(0.5); opacity: 0; }
+                    20% { transform: translateY(-40px) scale(1.5); opacity: 1; }
+                    100% { transform: translateY(-100px) scale(1); opacity: 0; }
+                }
+                @keyframes float-left {
+                    0% { transform: translate(0, 0) scale(0.5); opacity: 0; }
+                    30% { transform: translate(-20px, -30px) scale(1); opacity: 0.8; }
+                    100% { transform: translate(-40px, -80px) scale(0.5); opacity: 0; }
+                }
+                @keyframes float-right {
+                    0% { transform: translate(0, 0) scale(0.5); opacity: 0; }
+                    30% { transform: translate(20px, -30px) scale(1); opacity: 0.8; }
+                    100% { transform: translate(40px, -80px) scale(0.5); opacity: 0; }
+                }
+                @keyframes pop-in {
+                    0% { transform: scale(0); }
+                    50% { transform: scale(1.5); }
+                    100% { transform: scale(1); }
+                }
+                @keyframes shake {
+                    0%, 100% { transform: translateX(0); }
+                    25% { transform: translateX(-4px) rotate(-4deg); }
+                    75% { transform: translateX(4px) rotate(4deg); }
+                }
+                .animate-float-main { animation: float-main 1s cubic-bezier(0.23, 1, 0.32, 1) forwards; }
+                .animate-float-left { animation: float-left 1s cubic-bezier(0.23, 1, 0.32, 1) forwards; }
+                .animate-float-right { animation: float-right 1s cubic-bezier(0.23, 1, 0.32, 1) forwards; }
+                .animate-pop-in { animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+                .animate-shake { animation: shake 0.3s cubic-bezier(.36,.07,.19,.97) both; }
+            `}</style>
+        </div >
+    );
+};
+
+export default ActionButtons;

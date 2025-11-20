@@ -1,0 +1,5 @@
+{
+  "name": "PRISM",
+  "description": "Une application d'actualités de style TikTok qui utilise l'IA pour analyser et visualiser le biais politique des articles de presse de diverses sources. Les utilisateurs peuvent faire défiler des fiches d'actualités en plein écran, consulter des résumés générés par l'IA et voir une répartition des tendances politiques pour encourager une consommation d'informations plus critique et équilibrée.",
+  "requestFramePermissions": []
+}

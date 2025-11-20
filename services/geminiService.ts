@@ -76,9 +76,6 @@ const fetchNewsArticles = async (query?: string, category?: string): Promise<New
     }
   }
   console.log(`[PRISM] Cache NOT FOUND for key: ${cacheKey}, generating new content...`);
-  
-  // FORCE MOCK FOR TESTING
-  throw new Error("Forcing Mock Data for UI Test");
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
 
@@ -239,7 +236,8 @@ const fetchNewsArticles = async (query?: string, category?: string): Promise<New
         try {
           const imageUrl = await imagenService.generateCaricature({
             prompt: article.imagePrompt,
-            aspectRatio: "16:9"
+            aspectRatio: "16:9",
+            id: article.id
           });
           return { ...article, imageUrl };
         } catch (error) {

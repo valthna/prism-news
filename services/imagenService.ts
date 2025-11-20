@@ -1,9 +1,78 @@
 import { GoogleGenAI } from "@google/genai";
+import { supabase } from './supabaseClient';
 
 interface ImageGenerationOptions {
     prompt: string;
     aspectRatio?: "1:1" | "3:4" | "4:3" | "9:16" | "16:9";
+    id?: string;
 }
+
+const SUPABASE_BUCKET = 'Images for prism';
+
+const sanitizeFilename = (input: string) =>
+    input
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/gi, '-')
+        .replace(/^-+|-+$/g, '') || 'prism-image';
+
+const dataUrlToBlob = (dataUrl: string) => {
+    const [metadata, base64] = dataUrl.split(',');
+    const mimeMatch = metadata.match(/data:(.*?);base64/);
+    const contentType = mimeMatch ? mimeMatch[1] : 'image/png';
+    const binary =
+        typeof atob === 'function'
+            ? atob(base64)
+            : typeof Buffer !== 'undefined'
+                ? Buffer.from(base64, 'base64').toString('binary')
+                : '';
+
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+
+    return { blob: new Blob([bytes], { type: contentType }), contentType };
+};
+
+const uploadImageToSupabase = async (dataUrl: string, identifier?: string): Promise<string | null> => {
+    if (!supabase) {
+        return null;
+    }
+
+    try {
+        const { blob, contentType } = dataUrlToBlob(dataUrl);
+        const safeId = sanitizeFilename(identifier ?? 'prism-image');
+        const randomSuffix = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}`;
+        const filePath = `articles/${safeId}-${randomSuffix}.png`;
+
+        const { error: uploadError } = await supabase
+            .storage
+            .from(SUPABASE_BUCKET)
+            .upload(filePath, blob, {
+                cacheControl: '3600',
+                upsert: true,
+                contentType,
+            });
+
+        if (uploadError) {
+            console.warn("[PRISM] Échec upload Supabase:", uploadError.message);
+            return null;
+        }
+
+        const { data } = supabase
+            .storage
+            .from(SUPABASE_BUCKET)
+            .getPublicUrl(filePath);
+
+        return data?.publicUrl ?? null;
+    } catch (error) {
+        console.warn("[PRISM] Upload Supabase impossible:", error);
+        return null;
+    }
+};
 
 /**
  * Service pour générer des caricatures satiriques avec Gemini 2.5 Flash Image (Nano Banana)
@@ -25,6 +94,7 @@ export class ImagenService {
         const {
             prompt,
             aspectRatio = "16:9",
+            id,
         } = options;
 
         // Enrichissement du prompt pour le style caricature
@@ -51,7 +121,9 @@ export class ImagenService {
                     if (part.inlineData) {
                         const imageData = part.inlineData.data;
                         // Convertir en data URL utilisable dans le DOM
-                        return `data:image/png;base64,${imageData}`;
+                        const dataUrl = `data:image/png;base64,${imageData}`;
+                        const uploadedUrl = await uploadImageToSupabase(dataUrl, id ?? prompt);
+                        return uploadedUrl ?? dataUrl;
                     }
                 }
             }

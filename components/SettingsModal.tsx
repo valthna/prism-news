@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CloseIcon } from './icons/CloseIcon';
 import { ChevronRightIcon } from './icons/ChevronRightIcon';
 
@@ -52,6 +52,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [autoPlay, setAutoPlay] = useState(true);
   const [highContrast, setHighContrast] = useState(false);
   const [textSize, setTextSize] = useState(100); // Percentage
+  const [morningBrief, setMorningBrief] = useState(true);
+  const [weekendDigest, setWeekendDigest] = useState(false);
+  const [preloadInsights, setPreloadInsights] = useState(true);
+  const preferenceSummary = [
+    { label: 'Langue', value: 'FR · Français' },
+    { label: 'Alertes', value: notifications ? 'Actives' : 'Coupées' },
+    { label: 'Accessibilité', value: highContrast ? 'Contraste +' : 'Standard' },
+  ];
+  const titleId = "settings-modal-title";
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center sm:items-end sm:justify-center pointer-events-none">
@@ -62,11 +81,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         />
 
         {/* Modal Container */}
-        <div className="pointer-events-auto w-full sm:max-w-md h-full sm:h-[85vh] bg-[#121212] sm:rounded-t-3xl flex flex-col shadow-2xl animate-slide-up overflow-hidden ring-1 ring-white/10">
+        <div
+            className="pointer-events-auto w-full sm:max-w-md h-full sm:h-[85vh] bg-[#121212] sm:rounded-t-3xl flex flex-col shadow-2xl animate-slide-up overflow-hidden ring-1 ring-white/10"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+        >
             
             {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-white/10 bg-[#121212]/80 backdrop-blur-md z-10">
-                <h2 className="text-xl font-black tracking-tight text-white">Réglages</h2>
+                <h2 id={titleId} className="text-xl font-black tracking-tight text-white">Réglages</h2>
                 <button 
                     onClick={onClose}
                     className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors"
@@ -78,18 +102,28 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto p-5 pb-20 custom-scrollbar">
                 
-                {/* Profile Card */}
-                <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-white/5 to-white/10 rounded-2xl border border-white/10 mb-6">
-                    <div className="w-14 h-14 rounded-full bg-neon-accent flex items-center justify-center text-black font-black text-xl shadow-lg shadow-neon-accent/20">
-                        A
+                {/* Profile + Résumé */}
+                <div className="rounded-3xl border border-white/10 bg-gradient-to-r from-white/5 to-white/10 p-5 mb-6 space-y-5 shadow-lg shadow-black/30">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-full bg-neon-accent flex items-center justify-center text-black font-black text-xl shadow-lg shadow-neon-accent/20">
+                            A
+                        </div>
+                        <div className="flex-1">
+                            <div className="text-base font-bold text-white">Alpha User</div>
+                            <div className="text-xs text-gray-400">Membre PRISM Pro</div>
+                        </div>
+                        <button className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white transition-colors">
+                            Éditer
+                        </button>
                     </div>
-                    <div className="flex-1">
-                        <div className="text-base font-bold text-white">Alpha User</div>
-                        <div className="text-xs text-gray-400">Membre PRISM Pro</div>
+                    <div className="grid grid-cols-3 gap-3">
+                        {preferenceSummary.map(item => (
+                            <div key={item.label} className="bg-black/30 rounded-2xl border border-white/5 px-3 py-2">
+                                <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-gray-500">{item.label}</p>
+                                <p className="text-sm text-white">{item.value}</p>
+                            </div>
+                        ))}
                     </div>
-                    <button className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white transition-colors">
-                        Éditer
-                    </button>
                 </div>
 
                 {/* Section: Préférences de Contenu */}
@@ -135,19 +169,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     <SettingRow label="Lecture Automatique" subLabel="Vidéos et animations">
                         <Toggle checked={autoPlay} onChange={setAutoPlay} />
                     </SettingRow>
-                     <SettingRow label="Économiseur de Données" subLabel="Réduit la qualité des images">
-                        <Toggle checked={dataSaver} onChange={setDataSaver} />
-                    </SettingRow>
                 </div>
 
-                {/* Section: Notifications */}
-                <SectionHeader title="Notifications" />
+                {/* Section: Alertes */}
+                <SectionHeader title="Alertes & Diffusion" />
                 <div className="flex flex-col rounded-2xl overflow-hidden bg-white/5 border border-white/5">
-                    <SettingRow label="Alertes Info (Push)">
+                    <SettingRow label="Alertes info (push)" subLabel="Signaux breaking news vérifiés">
                         <Toggle checked={notifications} onChange={setNotifications} />
                     </SettingRow>
-                    <SettingRow label="Résumé Matinal" subLabel="Envoyé à 08:00">
-                        <Toggle checked={true} onChange={() => {}} />
+                    <SettingRow label="Résumé matinal" subLabel="Synthèse IA envoyée à 08:00">
+                        <Toggle checked={morningBrief} onChange={setMorningBrief} />
+                    </SettingRow>
+                    <SettingRow label="Digest week-end" subLabel="Curations longues, samedi 10:00">
+                        <Toggle checked={weekendDigest} onChange={setWeekendDigest} />
                     </SettingRow>
                 </div>
 
@@ -165,6 +199,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </SettingRow>
                      <SettingRow label="Se déconnecter" isDestructive onClick={() => {}} >
                         {null}
+                    </SettingRow>
+                </div>
+
+                {/* Section: Données & Performances */}
+                <SectionHeader title="Données & Performances" />
+                <div className="flex flex-col rounded-2xl overflow-hidden bg-white/5 border border-white/5">
+                    <SettingRow label="Économiseur de données" subLabel="Réduit la qualité des images sur réseau cellulaire">
+                        <Toggle checked={dataSaver} onChange={setDataSaver} />
+                    </SettingRow>
+                    <SettingRow label="Pré-chargement des analyses" subLabel="Télécharge les résumés IA avant ouverture">
+                        <Toggle checked={preloadInsights} onChange={setPreloadInsights} />
                     </SettingRow>
                 </div>
 

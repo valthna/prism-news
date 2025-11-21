@@ -18,3 +18,11 @@ View your app in AI Studio: https://ai.studio/apps/drive/1etqAMwONnD6e7C7neFqWSv
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Modèle de sourcing PRISM
+
+- Le moteur demande désormais **au moins 10 sujets distincts** par requête et les classe par **densité décroissante de sources**.
+- Chaque sujet est enrichi d'**au minimum 5 sources vérifiées** (objectif 8 à 12) couvrant gauche/centre/droite. Le score de fiabilité récompense les articles dépassant ce seuil.
+- Un **pool de sources de référence** (Reuters, Le Monde, Guardian, etc.) complète automatiquement les récits sous-documentés tout en conservant un lien de recherche fiable.
+- Un **jeu de sujets stratégiques de secours** (transition juste, IA, cybersécurité, finance durable, etc.) garantit une couverture éditoriale minimale même sans accès API.
+- Le cache local + Supabase conserve les articles enrichis pour accélérer les requêtes suivantes et éviter la surcharge de l'API Gemini.

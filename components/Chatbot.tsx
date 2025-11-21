@@ -1,21 +1,55 @@
-import React, { useState, useEffect, useRef, FormEvent } from 'react';
+import React, { useState, useEffect, useRef, FormEvent, useMemo } from 'react';
 import { GoogleGenAI, Chat } from '@google/genai';
 import { NewsArticle, ChatMessage } from '../types';
 import { SendIcon } from './icons/SendIcon';
 import { CloseIcon } from './icons/CloseIcon';
 import { StarIcon } from './icons/StarIcon';
 
+const DEFAULT_SUGGESTIONS = [
+    "Quels faits sont confirmés ?",
+    "Quelles conséquences à court terme ?",
+    "Quelle voix manque encore ?"
+];
+
 const Chatbot: React.FC<{ isOpen: boolean, onClose: () => void, article: NewsArticle | null }> = ({ isOpen, onClose, article }) => {
+    const apiKey = process.env.API_KEY;
+    const hasApiKey = Boolean(apiKey);
+    const isDemoMode = !hasApiKey;
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [userInput, setUserInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const chatSession = useRef<Chat | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const suggestionPrompts = useMemo(() => {
+        if (!article) return DEFAULT_SUGGESTIONS;
+        return [
+            `Pourquoi "${article.headline}" polarise-t-il ?`,
+            `Quels biais ressortent pour "${article.headline}" ?`,
+            `Que faut-il surveiller dans les 6 prochains mois ?`
+        ];
+    }, [article]);
+    const handleSuggestionClick = (prompt: string) => {
+        setUserInput(prompt);
+        setTimeout(() => {
+            inputRef.current?.focus();
+        }, 50);
+    };
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                onClose();
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onClose]);
+    const dialogTitleId = "chatbot-dialog-title";
 
     useEffect(() => {
         if (isOpen && article) {
-            if (!process.env.API_KEY) {
+            if (!hasApiKey) {
                 console.warn("Chatbot: API Key missing, using mock mode.");
                 setMessages([{
                     role: 'model',
@@ -24,7 +58,7 @@ const Chatbot: React.FC<{ isOpen: boolean, onClose: () => void, article: NewsArt
                 setTimeout(() => inputRef.current?.focus(), 400);
                 return;
             }
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey: apiKey as string });
             const systemInstruction = `Tu es PRISM AI, un analyste expert en géopolitique et média. Tu analyses l'article "${article.headline}". Réponds de manière concise, neutre et factuelle.`;
 
             chatSession.current = ai.chats.create({
@@ -55,7 +89,7 @@ const Chatbot: React.FC<{ isOpen: boolean, onClose: () => void, article: NewsArt
         setUserInput('');
         setIsLoading(true);
 
-        if (!process.env.API_KEY) {
+        if (!hasApiKey) {
             setTimeout(() => {
                 const mockResponses = [
                     "Ceci est une réponse simulée. L'article soulève des points intéressants sur les conséquences économiques.",
@@ -98,11 +132,28 @@ const Chatbot: React.FC<{ isOpen: boolean, onClose: () => void, article: NewsArt
                 </div>
             </div>
 
-            <div className="pointer-events-auto w-full sm:max-w-md h-[85vh] sm:h-[600px] bg-[#121212] sm:rounded-3xl rounded-t-3xl shadow-2xl border border-white/10 flex flex-col overflow-hidden animate-slide-up relative">
-                <header className="p-3 border-b border-white/10 bg-[#121212]/90 backdrop-blur flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 bg-neon-accent rounded-full animate-pulse"></div>
-                        <h2 className="text-xs font-bold tracking-widest uppercase text-gray-300">PRISM AI</h2>
+            <div
+                className="pointer-events-auto w-full sm:max-w-md h-[85vh] sm:h-[600px] bg-[#121212] sm:rounded-3xl rounded-t-3xl shadow-2xl border border-white/10 flex flex-col overflow-hidden animate-slide-up relative"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={dialogTitleId}
+            >
+                <header className="p-3 border-b border-white/10 bg-[#121212]/90 backdrop-blur flex justify-between items-start gap-3">
+                    <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 bg-neon-accent rounded-full animate-pulse"></div>
+                            <h2 id={dialogTitleId} className="text-xs font-bold tracking-widest uppercase text-gray-300">PRISM AI</h2>
+                            {isDemoMode && (
+                                <span className="text-[9px] font-black uppercase tracking-[0.3em] px-2 py-0.5 rounded-full bg-yellow-400/20 text-yellow-300 border border-yellow-300/30">
+                                    Mode démo
+                                </span>
+                            )}
+                        </div>
+                        {article && (
+                            <p className="text-[10px] text-gray-500 font-medium line-clamp-2">
+                                {article.headline}
+                            </p>
+                        )}
                     </div>
                     <button onClick={onClose} className="p-1.5 hover:bg-white/10 rounded-full transition-colors">
                         <CloseIcon className="w-4 h-4 text-gray-400" />
@@ -110,6 +161,14 @@ const Chatbot: React.FC<{ isOpen: boolean, onClose: () => void, article: NewsArt
                 </header>
 
                 <div className="flex-1 overflow-y-auto pt-4 pb-4 px-4 space-y-4 bg-[#0a0a0a]">
+                    {article && (
+                        <div className="bg-white/5 border border-white/10 rounded-2xl p-3 text-sm text-gray-200 leading-relaxed">
+                            <div className="text-[9px] font-bold uppercase tracking-[0.3em] text-gray-500 mb-1">Brief synthétique</div>
+                            <p className="text-[13px] text-gray-200 line-clamp-3">
+                                {article.summary || "Synthèse en cours de génération."}
+                            </p>
+                        </div>
+                    )}
                     {messages.map((msg, i) => (
                         <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.role === 'user'
@@ -132,7 +191,18 @@ const Chatbot: React.FC<{ isOpen: boolean, onClose: () => void, article: NewsArt
                     <div ref={messagesEndRef} />
                 </div>
 
-                <div className="p-4 bg-[#121212] border-t border-white/10">
+                <div className="p-4 bg-[#121212] border-t border-white/10 space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                        {suggestionPrompts.map((prompt) => (
+                            <button
+                                key={prompt}
+                                onClick={() => handleSuggestionClick(prompt)}
+                                className="px-3 py-1.5 rounded-full text-[11px] font-semibold border border-white/15 text-gray-300 hover:bg-white hover:text-black transition-colors"
+                            >
+                                {prompt}
+                            </button>
+                        ))}
+                    </div>
                     <form onSubmit={handleSendMessage} className="relative">
                         <input
                             ref={inputRef}

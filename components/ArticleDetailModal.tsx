@@ -57,7 +57,8 @@ const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({ article, onClos
                     </div>
                     <button
                         onClick={handleClose}
-                        className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors border border-white/10"
+                        className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors border border-white/10 touch-target"
+                        aria-label="Fermer"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-gray-400">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

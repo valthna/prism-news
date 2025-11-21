@@ -1,22 +1,24 @@
-# 🍌 Migration vers Gemini 2.5 Flash Image (Nano Banana)
+# ✨ Migration vers Gemini 3 Pro Image Preview
 
 ## Changements effectués
 
 ### 1. **Service Imagen** (`/services/imagenService.ts`)
-- Modèle : `gemini-2.5-flash-image` (Nano Banana 🍌)
+- Modèle : `gemini-3-pro-image-preview`
 - Style : **Caricatures satiriques** à la française (Plantu, Cabu, Wolinski)
-- Format : 16:9 par défaut (optimisé pour desktop)
-- Génération : Rapide et fiable avec Google Gemini
+- Format : 3:4 portrait par défaut (aligné mobile & desktop)
+- Génération : via **tools.googleSearch**, `imageSize: "4K"` et `mediaResolution: high` pour préserver la lisibilité
+- Le modèle raisonne avant rendu (penser à prévoir quelques secondes supplémentaires)
 
 ### 2. **Intégration dans le flux** (`/services/geminiService.ts`)
 - Les images sont **pré-générées** lors de la récupération des articles
 - Génération **en parallèle** pour tous les articles (performance optimale)
 - **Fallback automatique** vers Pollinations si échec Gemini
+- Clé de cache versionnée (`g3-image-preview-v1`) pour forcer la régénération des visuels dans `news_cache` et `news_tiles`
 
 ### 3. **NewsCard** (`/components/NewsCard.tsx`)
 - Style de prompt adapté aux caricatures
 - Fallback robuste vers Pollinations en cas d’échec
-- Format optimisé : 1920x1080 (16:9)
+- Format optimisé : 1080x1440 (3:4 portrait)
 
 ## Fonctionnement
 
@@ -28,9 +30,9 @@
 ## Avantages
 
 ✅ **Style cohérent** : Caricatures satiriques françaises  
-✅ **Vitesse** : Modèle Flash ultra-rapide  
+✅ **Raisonnement visuel** : Gemini 3 améliore l’OCR implicite et la fidélité via `media_resolution_high`  
 ✅ **Fiabilité** : Double fallback (Gemini → Pollinations)  
-✅ **Qualité** : Gemini pour les caricatures > Flux-pro pour photos  
+✅ **Qualité** : Génération native en 4K avec text rendering propre  
 
 ## Exemple de prompt généré
 
@@ -52,7 +54,7 @@ import { getImagenService } from './services/imagenService';
 const service = getImagenService();
 const imageUrl = await service.generateCaricature({
   prompt: "Macron and Trump shaking hands",
-  aspectRatio: "16:9"
+  aspectRatio: "3:4"
 });
 
 console.log(imageUrl); // data:image/png;base64,...

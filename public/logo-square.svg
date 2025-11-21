@@ -1,12 +1,39 @@
-<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img"
+  aria-labelledby="title desc">
+  <title id="title">PRISM - L'Actu Spectrale</title>
+  <desc id="desc">Logo PRISM avec effet glitch cyan et rouge sur fond noir.</desc>
   <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#32ADE6" />
-      <stop offset="50%" stop-color="#8B5CF6" />
-      <stop offset="100%" stop-color="#EC4899" />
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#20D5FF" />
+      <stop offset="1" stop-color="#FF4D6D" />
     </linearGradient>
+    <filter id="blur-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="blur" />
+    </filter>
   </defs>
-  <rect rx="64" ry="64" width="512" height="512" fill="#050505" />
-  <rect x="32" y="32" width="448" height="448" rx="48" ry="48" fill="url(#grad)" opacity="0.2" />
-  <text x="50%" y="55%" fill="#FFFFFF" font-family="'Space Mono', 'Outfit', sans-serif" font-weight="900" font-size="160" text-anchor="middle" letter-spacing="0.1em">PRISM</text>
+
+  <rect width="512" height="512" rx="64" ry="64" fill="#050505" />
+  <rect x="128" y="356" width="256" height="6" rx="3" fill="url(#glow)" opacity="0.45" />
+
+  <g transform="translate(256 238) scale(0.62)">
+    <g transform="skewX(-12)">
+      <text x="0" y="0" text-anchor="middle" font-family="'Outfit', 'Space Mono', sans-serif" font-size="190"
+        font-weight="800" letter-spacing="8">
+        <tspan fill="#12E4FF" dx="-10">PRISM</tspan>
+      </text>
+      <text x="0" y="0" text-anchor="middle" font-family="'Outfit', 'Space Mono', sans-serif" font-size="190"
+        font-weight="800" letter-spacing="8">
+        <tspan fill="#FF3B58" dx="18">PRISM</tspan>
+      </text>
+      <text x="0" y="0" text-anchor="middle" font-family="'Outfit', 'Space Mono', sans-serif" font-size="190"
+        font-weight="900" letter-spacing="8" fill="#FFFFFF" paint-order="stroke">
+        PRISM
+      </text>
+    </g>
+  </g>
+
+  <g opacity="0.35" filter="url(#blur-glow)" transform="translate(256 238) scale(0.62)">
+    <text x="0" y="0" text-anchor="middle" font-family="'Outfit', 'Space Mono', sans-serif" font-size="182"
+      font-weight="700" fill="url(#glow)" letter-spacing="8" transform="skewX(-12)">PRISM</text>
+  </g>
 </svg>

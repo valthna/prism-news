@@ -1,5 +1,43 @@
 import React, { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { BiasAnalysis, Source } from '../types';
+
+const getDomainFromUrl = (rawUrl?: string): string | undefined => {
+    if (!rawUrl) {
+        return undefined;
+    }
+
+    const trimmed = rawUrl.trim();
+    if (!trimmed) {
+        return undefined;
+    }
+
+    try {
+        const normalized = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+        return new URL(normalized).hostname;
+    } catch {
+        const sanitized = trimmed.replace(/^[a-z]+:\/\//i, '').split('/')[0];
+        return sanitized || undefined;
+    }
+};
+
+const getFallbackDomain = (source: Source): string => {
+    const fromUrl = getDomainFromUrl(source.url);
+    if (fromUrl) {
+        return fromUrl;
+    }
+
+    const fromName = source.name
+        ?.toLowerCase()
+        .replace(/[^a-z0-9.-]/g, '')
+        .replace(/\s+/g, '');
+
+    if (fromName) {
+        return fromName.includes('.') ? fromName : `${fromName}.com`;
+    }
+
+    return 'news.google.com';
+};
 
 interface BiasAnalysisDisplayProps {
     analysis: BiasAnalysis;
@@ -7,9 +45,10 @@ interface BiasAnalysisDisplayProps {
     onSourceSelect: (source: Source) => void;
     onShowSources: () => void;
     className?: string;
+    mobileReliabilitySlot?: ReactNode;
 }
 
-const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sources, onSourceSelect, onShowSources, className = "" }) => {
+const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sources, onSourceSelect, onShowSources, className = "", mobileReliabilitySlot }) => {
     const [hoveredSourceId, setHoveredSourceId] = useState<string | null>(null);
 
     const positionedSources = useMemo(() => {
@@ -38,7 +77,7 @@ const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sou
 
     return (
         <div className={`flex flex-col h-full justify-between ${className}`}>
-            <div className="flex justify-between items-start mb-1">
+            <div className="flex justify-between items-start mb-1 lg:justify-start lg:gap-4">
                 <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2 text-gray-400">
                         <div className="flex -space-x-2">
@@ -64,17 +103,11 @@ const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sou
                         </div>
                     </div>
                 </div>
-                <div className="flex flex-col items-end">
-                    <span className="text=[8px] font-bold text-gray-500 uppercase tracking-widest mb-0.5">Fiabilité</span>
-                    <div className="flex items-baseline gap-0.5">
-                        <span className={`text-2xl font-black tracking-titter font-mono ${analysis.reliabilityScore >= 80 ? 'text-green-400' :
-                            analysis.reliabilityScore >= 50 ? 'text-yellow-400' : 'text-red-500'
-                            }`}>
-                            {analysis.reliabilityScore}
-                        </span>
-                        <span className="text-[10px] text-gray-600 font-bold">%</span>
+                {mobileReliabilitySlot && (
+                    <div className="flex-shrink-0">
+                        {mobileReliabilitySlot}
                     </div>
-                </div>
+                )}
             </div>
 
             <div className="flex flex-col justify-end flex-1 min-h-0">
@@ -85,8 +118,8 @@ const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sou
                     <div className="absolute top-1/2 left-1/2 w-0.5 h-4 bg-white/80 -translate-y-1/2 -translate-x-1/2 z-0 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
 
                     {positionedSources.map((source) => {
-                        const domainName = source.name.toLowerCase().replace(/\s+/g, '');
-                        const googleFavicon = `https://www.google.com/s2/favicons?domain=${domainName}.com&sz=64`;
+                        const fallbackDomain = getFallbackDomain(source);
+                        const googleFavicon = `https://www.google.com/s2/favicons?domain=${fallbackDomain}&sz=64`;
                         const isHovered = hoveredSourceId === source.name;
 
                         return (
@@ -107,7 +140,16 @@ const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sou
                                         src={source.logoUrl}
                                         alt=""
                                         className="w-full h-full object-cover"
-                                        onError={(e) => { (e.target as HTMLImageElement).src = googleFavicon; }}
+                                        onError={(event) => {
+                                            const img = event.currentTarget;
+                                            if (img.dataset.fallbackApplied === 'true') {
+                                                img.onerror = null;
+                                                img.src = '/favicon.ico';
+                                                return;
+                                            }
+                                            img.dataset.fallbackApplied = 'true';
+                                            img.src = googleFavicon;
+                                        }}
                                     />
                                 </button>
 

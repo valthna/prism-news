@@ -17,14 +17,26 @@ const ActionButton: React.FC<{
     extraClass?: string,
     activeColor?: string,
     counter?: number
-}> = ({ children, label, onClick, extraClass = "", activeColor, counter }) => (
-    <button
-        onClick={onClick}
-        className={`flex flex-col items-center text-white space-y-2 group disabled:opacity-50 relative ${extraClass}`}
-        disabled={!onClick}
-    >
-        <div className="relative">
-            <div className={`
+}> = ({ children, label, onClick, extraClass = "", activeColor, counter }) => {
+    const glowStyles: React.CSSProperties | undefined = activeColor
+        ? {
+            boxShadow: `0 0 24px ${activeColor}`,
+            borderColor: activeColor,
+        }
+        : undefined;
+
+    const glowOverlayStyle: React.CSSProperties | undefined = activeColor
+        ? { backgroundColor: activeColor }
+        : undefined;
+
+    return (
+        <button
+            onClick={onClick}
+            className={`flex flex-col items-center text-white space-y-2 group disabled:opacity-50 relative ${extraClass}`}
+            disabled={!onClick}
+        >
+            <div className="relative">
+                <div className={`
                 center-perfect 
                 relative p-3.5 rounded-2xl 
                 min-w-[48px] min-h-[48px]
@@ -33,17 +45,16 @@ const ActionButton: React.FC<{
                 shadow-[0_8px_24px_rgba(0,0,0,0.4)] 
                 group-hover:bg-white/20 group-hover:border-white/40 
                 group-hover:shadow-[0_12px_32px_rgba(0,0,0,0.5)]
-                group-active:scale-90 
-                transition-all duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)
+                group-active:scale-[0.92]
+                transition-all duration-500 cubic-bezier(0.175, 0.885, 0.32, 1.275) /* Spring physics */
                 overflow-hidden
-                ${activeColor ? `shadow-[0_0_24px_${activeColor}] border-${activeColor}/60` : ''}
-            `}>
+            `} style={glowStyles}>
                 {/* Inner Shine */}
                 <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
 
                 {/* Active Glow Background */}
                 {activeColor && (
-                    <div className={`absolute inset-0 opacity-25 bg-${activeColor} blur-md`}></div>
+                    <div className="absolute inset-0 opacity-25 blur-md" style={glowOverlayStyle}></div>
                 )}
 
                 {/* Content */}
@@ -58,23 +69,30 @@ const ActionButton: React.FC<{
                     {counter}
                 </div>
             )}
-        </div>
+            </div>
 
-        <div className="flex flex-col items-center">
-            <span className="text-[10px] font-black uppercase tracking-[0.15em] text-gray-300 group-hover:text-white transition-colors duration-200">
-                {label}
-            </span>
-        </div>
-    </button>
-);
+            <div className="flex flex-col items-center">
+                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-gray-300 group-hover:text-white transition-colors duration-200">
+                    {label}
+                </span>
+            </div>
+        </button>
+    );
+};
+
+interface CommunityStats {
+    positive: number;
+    negative: number;
+}
 
 interface ActionButtonsProps {
     article: Pick<NewsArticle, 'headline' | 'summary'>;
     onShowSentiment: () => void;
     className?: string;
+    communityStats?: CommunityStats;
 }
 
-const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment, className = "" }) => {
+const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment, className = "", communityStats }) => {
     const [showReactions, setShowReactions] = useState(false);
     const [selectedReaction, setSelectedReaction] = useState<{ emoji: string, label: string, color: string } | null>(null);
     const [animateReaction, setAnimateReaction] = useState(false);
@@ -90,11 +108,11 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
     }, []);
 
     const reactions = [
-        { emoji: '🔥', label: 'Top', id: 'fire', color: 'text-orange-500', glow: 'orange-500' },
-        { emoji: '🤯', label: 'Choc', id: 'shock', color: 'text-purple-400', glow: 'purple-500' },
-        { emoji: '🤔', label: 'Doute', id: 'doubt', color: 'text-yellow-400', glow: 'yellow-500' },
-        { emoji: '😡', label: 'Colère', id: 'angry', color: 'text-red-500', glow: 'red-500' },
-        { emoji: '👏', label: 'Bravo', id: 'clap', color: 'text-green-400', glow: 'green-500' },
+        { emoji: '🔥', label: 'Top', id: 'fire', color: 'text-orange-500', glowColor: '#f97316' },
+        { emoji: '🤯', label: 'Choc', id: 'shock', color: 'text-purple-400', glowColor: '#a855f7' },
+        { emoji: '🤔', label: 'Doute', id: 'doubt', color: 'text-yellow-400', glowColor: '#eab308' },
+        { emoji: '😡', label: 'Colère', id: 'angry', color: 'text-red-500', glowColor: '#ef4444' },
+        { emoji: '👏', label: 'Bravo', id: 'clap', color: 'text-green-400', glowColor: '#22c55e' },
     ];
 
     const handleReaction = (r: typeof reactions[0]) => {
@@ -123,6 +141,9 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
         }, 300);
     };
 
+    const totalCommunityVotes = (communityStats?.positive ?? 0) + (communityStats?.negative ?? 0);
+    const positiveRatio = totalCommunityVotes > 0 ? Math.round((communityStats!.positive / totalCommunityVotes) * 100) : 50;
+
     return (
         <div className={`flex ${isRow ? 'flex-row' : 'flex-col'} items-center gap-4 relative z-40 ${className}`}>
             {animateReaction && selectedReaction && (
@@ -141,9 +162,11 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                 </div>
             )}
 
-            <ActionButton label="DÉBAT" onClick={onShowSentiment}>
-                <OpinionIcon className="w-6 h-6" />
-            </ActionButton>
+            <div className="flex flex-col items-center gap-2">
+                <ActionButton label="DÉBAT" onClick={onShowSentiment}>
+                    <OpinionIcon className="w-6 h-6" />
+                </ActionButton>
+            </div>
 
             <div className="relative flex flex-col items-center"
                 onMouseEnter={handleMouseEnter}
@@ -193,7 +216,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                     <ActionButton
                         label={selectedReaction ? "VOTÉ" : "RÉAGIR"}
                         onClick={() => setShowReactions(!showReactions)}
-                        activeColor={selectedReaction?.glow}
+                        activeColor={selectedReaction?.glowColor}
                         counter={reactionCount}
                     >
                         <div className={`transform transition-transform duration-300 ${animateReaction ? 'scale-125' : ''}`}>

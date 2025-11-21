@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { NewsArticle } from './types';
 import { fetchNewsArticles } from './services/geminiService';
 import NewsCard from './components/NewsCard';
@@ -11,6 +11,17 @@ import { SettingsIcon } from './components/icons/SettingsIcon';
 import { SearchIcon } from './components/icons/SearchIcon';
 import { ShareIcon } from './components/icons/ShareIcon';
 import HideInterfaceButton from './components/HideInterfaceButton';
+import { DEFAULT_CATEGORY } from './constants/categories';
+
+const PROGRESS_CAP_BEFORE_COMPLETION = 96;
+const DEFAULT_LOAD_DURATION_MS = 4500;
+const LOADING_PHASES = [
+    { until: 6, label: "Initialisation Système" },
+    { until: 30, label: "Scan Sources Mondiales" },
+    { until: 60, label: "Agrégation Données" },
+    { until: 85, label: "Détection Biais" },
+    { until: PROGRESS_CAP_BEFORE_COMPLETION + 1, label: "Génération Synthèse" }
+];
 
 // --- PRODUCTION GRADE LOADING SCREEN WITH VORTEX ---
 
@@ -193,61 +204,169 @@ const App: React.FC = () => {
     const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
     const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
-    const [currentCategory, setCurrentCategory] = useState<string>("Général");
+    const [currentCategory, setCurrentCategory] = useState<string>(DEFAULT_CATEGORY.value);
+    const [currentQuery, setCurrentQuery] = useState<string>('');
     const [isInterfaceHidden, setIsInterfaceHidden] = useState<boolean>(false);
 
     // Loading State
-    const [loadingStatus, setLoadingStatus] = useState("Initialisation");
+    const [loadingStatus, setLoadingStatus] = useState(LOADING_PHASES[0].label);
     const [processedCount, setProcessedCount] = useState(0);
+
+    const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const completionFrameRef = useRef<number | null>(null);
+    const loadingStartRef = useRef<number | null>(null);
+    const averageLoadDurationRef = useRef(DEFAULT_LOAD_DURATION_MS);
+    const activeLoadDurationRef = useRef(DEFAULT_LOAD_DURATION_MS);
+
+    const updateStatusByProgress = useCallback((progressPercent: number) => {
+        const phase = LOADING_PHASES.find((step) => progressPercent < step.until);
+        if (!phase) {
+            return;
+        }
+        setLoadingStatus((prev) => (prev === phase.label ? prev : phase.label));
+    }, []);
+
+    const cleanupProgressTimer = useCallback(() => {
+        if (progressIntervalRef.current) {
+            clearInterval(progressIntervalRef.current);
+            progressIntervalRef.current = null;
+        }
+    }, []);
+
+    const cancelCompletionAnimation = useCallback(() => {
+        if (completionFrameRef.current) {
+            cancelAnimationFrame(completionFrameRef.current);
+            completionFrameRef.current = null;
+        }
+    }, []);
+
+    const updateProgressTowards = useCallback((targetPercent: number) => {
+        setProcessedCount((prev) => {
+            const prevPercent = prev / 25;
+            const desired = Math.max(targetPercent, prevPercent);
+            const interpolated = prevPercent + (desired - prevPercent) * 0.2;
+            const nextPercent = Math.min(PROGRESS_CAP_BEFORE_COMPLETION, interpolated);
+            updateStatusByProgress(nextPercent);
+            return Math.round(nextPercent * 25);
+        });
+    }, [updateStatusByProgress]);
+
+    const startLoadingProgress = useCallback(() => {
+        cancelCompletionAnimation();
+        loadingStartRef.current = performance.now();
+        activeLoadDurationRef.current = averageLoadDurationRef.current;
+        setProcessedCount(0);
+        updateStatusByProgress(0);
+        cleanupProgressTimer();
+        progressIntervalRef.current = setInterval(() => {
+            if (!loadingStartRef.current) {
+                return;
+            }
+            const elapsed = performance.now() - loadingStartRef.current;
+            let expected = activeLoadDurationRef.current;
+            if (elapsed > expected * 0.9) {
+                expected = elapsed / 0.9;
+                activeLoadDurationRef.current = expected;
+            }
+            const progressRatio = Math.min(elapsed / expected, 1);
+            const target = progressRatio * PROGRESS_CAP_BEFORE_COMPLETION;
+            updateProgressTowards(target);
+        }, 120);
+    }, [cancelCompletionAnimation, cleanupProgressTimer, updateProgressTowards, updateStatusByProgress]);
+
+    const animateCompletion = useCallback(() => {
+        cleanupProgressTimer();
+        cancelCompletionAnimation();
+        loadingStartRef.current = null;
+        setLoadingStatus("Système Prêt");
+        const step = () => {
+            let keepGoing = false;
+            setProcessedCount((prev) => {
+                const prevPercent = prev / 25;
+                if (prevPercent >= 100) {
+                    return 2500;
+                }
+                const nextPercent = prevPercent + Math.max(1, (100 - prevPercent) * 0.35);
+                keepGoing = nextPercent < 99.5;
+                return Math.round(Math.min(nextPercent, 100) * 25);
+            });
+            if (keepGoing) {
+                completionFrameRef.current = requestAnimationFrame(step);
+            } else {
+                completionFrameRef.current = null;
+            }
+        };
+        step();
+    }, [cancelCompletionAnimation, cleanupProgressTimer]);
+
+    useEffect(() => {
+        return () => {
+            cleanupProgressTimer();
+            cancelCompletionAnimation();
+        };
+    }, [cleanupProgressTimer, cancelCompletionAnimation]);
 
     const getArticles = useCallback(async (query?: string, category?: string) => {
         try {
             setLoading(true);
             setError(null);
             setArticles([]); // Clear previous articles to show loading screen properly
-
-            const statusInterval = setInterval(() => {
-                setProcessedCount(p => {
-                    if (p >= 2400) return 2400;
-                    return p + Math.floor(Math.random() * 50);
-                });
-                const steps = ["Scan Sources Mondiales", "Agrégation Données", "Détection Biais", "Génération Synthèse"];
-                setLoadingStatus(prev => {
-                    if (Math.random() > 0.95) return steps[Math.floor(Math.random() * steps.length)];
-                    return prev;
-                });
-            }, 100);
+            startLoadingProgress();
 
             const fetchedArticles = await fetchNewsArticles(query, category);
 
-            clearInterval(statusInterval);
-            setLoadingStatus("Système Prêt");
-            setProcessedCount(2500);
+            if (loadingStartRef.current) {
+                const elapsed = performance.now() - loadingStartRef.current;
+                const safeElapsed = Math.max(elapsed, 800);
+                averageLoadDurationRef.current = (averageLoadDurationRef.current * 0.6) + (safeElapsed * 0.4);
+            }
+
+            animateCompletion();
 
             setTimeout(() => {
                 setArticles(fetchedArticles);
                 setLoading(false);
-            }, 800);
+            }, 400);
 
         } catch (err) {
             console.error(err);
+            cleanupProgressTimer();
+            cancelCompletionAnimation();
+            loadingStartRef.current = null;
+            setProcessedCount(0);
             if (err instanceof Error) {
                 setError(err.message);
             } else {
-                setError('Erreur système inconnue.');
+            setError('Erreur système inconnue.');
             }
             setLoading(false);
         }
-    }, []);
+    }, [startLoadingProgress, animateCompletion, cleanupProgressTimer, cancelCompletionAnimation]);
+
+    const hasFetchedRef = useRef(false);
 
     useEffect(() => {
+        if (hasFetchedRef.current) {
+            return;
+        }
+        hasFetchedRef.current = true;
         getArticles();
     }, [getArticles]);
 
     const handleSearch = (query: string, category: string) => {
+        const normalizedQuery = query.trim();
+        setCurrentQuery(normalizedQuery);
         setCurrentCategory(category);
-        getArticles(query, category);
+        getArticles(normalizedQuery || undefined, category);
     };
+
+    const handleCategoryFilterChange = useCallback((category: string) => {
+        if (category === currentCategory) {
+            return;
+        }
+        setCurrentCategory(category);
+        getArticles(currentQuery || undefined, category);
+    }, [currentCategory, currentQuery, getArticles]);
 
     const handleArticleVisible = useCallback((articleId: string) => {
         const index = articles.findIndex(a => a.id === articleId);
@@ -283,14 +402,23 @@ const App: React.FC = () => {
     if (loading) return <LoadingScreen status={loadingStatus} count={processedCount} />;
     if (error) return <ErrorScreen message={error} />;
 
+    const headerPaddingStyle: React.CSSProperties = {
+        '--safe-area-x': '1.5rem',
+        '--safe-area-top': '1rem',
+        '--safe-area-bottom': '0.25rem'
+    };
+
     return (
         <div className="fixed inset-0 bg-black text-white overflow-hidden font-sans selection:bg-neon-accent selection:text-black">
             <ProgressBar progress={scrollProgress} />
 
             {/* BRANDING HEADER - COMPACT & REMOVED TOP SPACE */}
-            <div className="absolute top-0 left-0 w-full px-6 pt-4 pb-1 z-50 pointer-events-none flex justify-between items-center bg-gradient-to-b from-black/90 via-black/60 to-transparent h-16">
-                <div className="flex flex-col justify-center h-full">
-                    <div className="relative">
+            <div
+                className="absolute top-0 left-0 w-full z-50 pointer-events-none flex justify-between items-center bg-gradient-to-b from-black/60 via-black/20 to-transparent h-16 safe-area-x safe-area-top safe-area-bottom"
+                style={headerPaddingStyle}
+            >
+                <div className="pointer-events-auto flex items-center h-full">
+                    <div className="relative h-10 px-4 rounded-full bg-white/5 border border-white/10 backdrop-blur-md shadow-lg flex items-center">
                         <span
                             className="font-black italic text-2xl tracking-tighter leading-none drop-shadow-lg chromatic-aberration relative z-10 block"
                             data-text="PRISM"
@@ -309,13 +437,15 @@ const App: React.FC = () => {
                     />
                     <button
                         onClick={() => setIsSearchOpen(true)}
-                        className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-center hover:bg-white/20 transition-colors group shadow-lg"
+                        className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-center hover:bg-white/20 transition-colors group shadow-lg touch-target"
+                        aria-label="Rechercher"
                     >
                         <SearchIcon className="w-4 h-4 text-gray-300 group-hover:text-white transition-colors" />
                     </button>
                     <button
                         onClick={() => setIsSettingsOpen(true)}
-                        className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-center hover:bg-white/20 transition-colors group shadow-lg"
+                        className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-center hover:bg-white/20 transition-colors group shadow-lg touch-target"
+                        aria-label="Paramètres"
                     >
                         <SettingsIcon className="w-4 h-4 text-gray-300 group-hover:text-white transition-colors group-hover:rotate-90 duration-500" />
                     </button>
@@ -330,6 +460,8 @@ const App: React.FC = () => {
                         onVisible={handleArticleVisible}
                         onChatOpen={() => setIsChatOpen(true)}
                         isInterfaceHidden={isInterfaceHidden}
+                        selectedCategory={currentCategory}
+                        onCategoryFilterChange={handleCategoryFilterChange}
                     />
                 ))}
                 {articles.length === 0 && !loading && (

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { SearchIcon } from './icons/SearchIcon';
 import { CloseIcon } from './icons/CloseIcon';
+import { CATEGORY_OPTIONS, getCategoryOption } from '../constants/categories';
 
 interface SearchOverlayProps {
     isOpen: boolean;
@@ -9,42 +10,79 @@ interface SearchOverlayProps {
     currentCategory: string;
 }
 
-const CATEGORIES = [
-    "Général",
-    "Politique",
-    "Technologie",
-    "Économie",
-    "International",
-    "Culture",
-    "Sciences",
-    "Sport",
-    "Environnement"
+const TRENDING_QUERIES = [
+    { label: "Ce qui se joue en Mer Rouge", query: "Mer Rouge tensions maritimes", category: "International" },
+    { label: "Élections US 2024", query: "Élections américaines 2024 sondages", category: "Politique" },
+    { label: "IA & emploi", query: "Impact de l'intelligence artificielle sur l'emploi", category: "Économie" },
+    { label: "Europe & climat", query: "Paquet climat européen", category: "Environnement" }
+];
+
+const QUESTION_PRESETS = [
+    "Quels angles médiatiques manquent sur ce sujet ?",
+    "Quelles sources resteront fiables si la situation évolue ?",
+    "Quel est le risque de désinformation à court terme ?"
 ];
 
 const SearchOverlay: React.FC<SearchOverlayProps> = ({ isOpen, onClose, onSearch, currentCategory }) => {
     const [query, setQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState(currentCategory);
     const [isVisible, setIsVisible] = useState(false);
+    const [recentSearches, setRecentSearches] = useState<string[]>([]);
+    const dialogRef = useRef<HTMLDivElement>(null);
+    const titleId = "search-overlay-title";
 
     useEffect(() => {
         if (isOpen) {
             setIsVisible(true);
             setSelectedCategory(currentCategory);
+            const handleKeyDown = (event: KeyboardEvent) => {
+                if (event.key === 'Escape') {
+                    onClose();
+                }
+            };
+            document.addEventListener('keydown', handleKeyDown);
+            return () => document.removeEventListener('keydown', handleKeyDown);
         } else {
             setTimeout(() => setIsVisible(false), 300);
         }
-    }, [isOpen, currentCategory]);
+    }, [isOpen, currentCategory, onClose]);
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        onSearch(query, selectedCategory);
+    const handleSubmit = (e?: React.FormEvent) => {
+        e?.preventDefault();
+        const sanitized = query.trim();
+        if (!sanitized) return;
+        onSearch(sanitized, selectedCategory);
+        setRecentSearches(prev => {
+            const next = [sanitized, ...prev.filter(item => item !== sanitized)];
+            return next.slice(0, 5);
+        });
         onClose();
+    };
+
+    const activeCategory = useMemo(
+        () => getCategoryOption(selectedCategory),
+        [selectedCategory]
+    );
+
+    const handleTrendingSelect = (topic: typeof TRENDING_QUERIES[number]) => {
+        setQuery(topic.query);
+        setSelectedCategory(topic.category);
+    };
+
+    const handleRecentSelect = (value: string) => {
+        setQuery(value);
     };
 
     if (!isOpen && !isVisible) return null;
 
     return (
-        <div className={`fixed inset-0 z-[60] flex items-start justify-center pt-[15vh] px-4 transition-all duration-500 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+        <div
+            className={`fixed inset-0 z-[60] flex items-start justify-center pt-[15vh] px-4 transition-all duration-500 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            ref={dialogRef}
+        >
             <div
                 className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-500"
                 onClick={onClose}
@@ -58,7 +96,8 @@ const SearchOverlay: React.FC<SearchOverlayProps> = ({ isOpen, onClose, onSearch
                 </div>
 
                 <div className="p-8 space-y-8">
-                    <form onSubmit={handleSubmit} className="relative group">
+                    <h2 id={titleId} className="sr-only">Recherche avancée PRISM</h2>
+                    <form onSubmit={handleSubmit} className="relative group space-y-3">
                         <div className="absolute inset-y-0 left-0 flex items-center pointer-events-none">
                             <SearchIcon className="h-8 w-8 text-gray-500 group-focus-within:text-neon-accent transition-colors duration-300" />
                         </div>
@@ -70,21 +109,80 @@ const SearchOverlay: React.FC<SearchOverlayProps> = ({ isOpen, onClose, onSearch
                             onChange={(e) => setQuery(e.target.value)}
                             autoFocus
                         />
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs font-mono text-gray-500 gap-2">
+                            <span>Catégorie active : <span className="text-white/90">{activeCategory.emoji} {activeCategory.value}</span></span>
+                            <span className="text-neon-accent/80">PRISM préparera 5 cartes équilibrées</span>
+                        </div>
+                        <p className="text-[11px] text-gray-500 font-sans">
+                            {activeCategory.description}
+                        </p>
                     </form>
+
+                    {recentSearches.length > 0 && (
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em]">Recherches récentes</label>
+                            <div className="flex flex-wrap gap-2">
+                                {recentSearches.map(item => (
+                                    <button
+                                        key={item}
+                                        onClick={() => handleRecentSelect(item)}
+                                        className="px-3 py-1.5 rounded-full text-[11px] font-semibold bg-white/5 text-gray-400 border border-white/10 hover:bg-white/15 hover:text-white transition-colors"
+                                    >
+                                        {item}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     <div className="space-y-4">
                         <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em]">Explorer par catégorie</label>
                         <div className="flex flex-wrap gap-2">
-                            {CATEGORIES.map((cat) => (
+                            {CATEGORY_OPTIONS.map((cat) => (
                                 <button
-                                    key={cat}
-                                    onClick={() => setSelectedCategory(cat)}
-                                    className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 border ${selectedCategory === cat
+                                    key={cat.value}
+                                    onClick={() => setSelectedCategory(cat.value)}
+                                    className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 border ${selectedCategory === cat.value
                                             ? 'bg-neon-accent text-black border-neon-accent shadow-[0_0_20px_rgba(50,173,230,0.4)] scale-105'
                                             : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10 hover:border-white/10 hover:text-white'
                                         }`}
                                 >
-                                    {cat}
+                                    <span className="mr-2">{cat.emoji}</span>
+                                    {cat.value}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="space-y-4">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em]">Focus du moment</label>
+                        <div className="grid sm:grid-cols-2 gap-3">
+                            {TRENDING_QUERIES.map((topic) => (
+                                <button
+                                    key={topic.label}
+                                    onClick={() => handleTrendingSelect(topic)}
+                                    className="flex items-start gap-3 text-left px-4 py-3 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
+                                >
+                                    <div className="w-2 h-2 rounded-full bg-neon-accent mt-1"></div>
+                                    <div>
+                                        <p className="text-sm font-semibold text-white">{topic.label}</p>
+                                        <p className="text-[11px] text-gray-400">{topic.category}</p>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="space-y-3">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em]">Questions rapides pour l'IA</label>
+                        <div className="flex flex-wrap gap-2">
+                            {QUESTION_PRESETS.map((preset) => (
+                                <button
+                                    key={preset}
+                                    onClick={() => setQuery(preset)}
+                                    className="px-4 py-2 rounded-full text-[11px] font-semibold border border-white/10 text-gray-300 hover:text-black hover:bg-white transition-colors"
+                                >
+                                    {preset}
                                 </button>
                             ))}
                         </div>

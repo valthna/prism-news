@@ -37,6 +37,7 @@ export interface NewsArticle {
   summary: string;
   publishedAt?: string; // Heure ou date de publication (ex: "LIVE", "Il y a 2h")
   emoji: string; // New: Single emoji representing the topic
+  category?: string; // Catégorie éditoriale (Politique, Économie, etc.)
   imagePrompt: string;
   imageUrl?: string; // URL réelle de l'image si trouvée
   biasAnalysis: BiasAnalysis;

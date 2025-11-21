@@ -13,6 +13,10 @@ create policy "Authenticated Upload"
   on storage.objects for insert
   with check ( bucket_id = 'news-images' );
 
+create policy "Cleanup old news images"
+  on storage.objects for delete
+  using ( bucket_id = 'news-images' );
+
 -- Drop unused tables
 drop table if exists ai_models;
 drop table if exists model_metrics;

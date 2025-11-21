@@ -10,10 +10,24 @@ interface SentimentModalProps {
   onClose: () => void;
 }
 
+const POSITIVE_SUGGESTIONS = [
+  "Je partage cette analyse, car elle recoupe d'autres sources fiables.",
+  "C'est cohérent avec les faits établis, notamment sur l'aspect économique.",
+  "Bonne synthèse, surtout sur l'équilibre des points de vue."
+];
+
+const NEGATIVE_SUGGESTIONS = [
+  "Analyse incomplète : aucune mention des contre-arguments principaux.",
+  "Sources trop homogènes, il manque un regard extérieur.",
+  "Attention aux chiffres avancés, ils datent d'avant la mise à jour."
+];
+
 const SentimentModal: React.FC<SentimentModalProps> = ({ sentiment, comments, onAddComment, onClose }) => {
   const [inputMode, setInputMode] = useState<'neutral' | 'positive' | 'negative'>('neutral');
   const [text, setText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dialogTitleId = "sentiment-dialog-title";
 
   const totalComments = comments.length;
   const positiveCount = comments.filter(c => c.sentiment === 'positive').length;
@@ -21,6 +35,20 @@ const SentimentModal: React.FC<SentimentModalProps> = ({ sentiment, comments, on
   
   const posPercent = totalComments > 0 ? Math.round((positiveCount / totalComments) * 100) : 50;
   const negPercent = totalComments > 0 ? 100 - posPercent : 50;
+
+  const handleSuggestionClick = (value: string) => {
+      setText(value);
+      setTimeout(() => inputRef.current?.focus(), 50);
+  };
+  useEffect(() => {
+      const handleKeyDown = (event: KeyboardEvent) => {
+          if (event.key === 'Escape') {
+              onClose();
+          }
+      };
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault();
@@ -51,12 +79,15 @@ const SentimentModal: React.FC<SentimentModalProps> = ({ sentiment, comments, on
     >
       <div 
         className="bg-[#121212] border border-white/10 sm:rounded-3xl w-full max-w-2xl h-full sm:h-[85vh] relative text-white shadow-2xl animate-slide-up overflow-hidden flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={dialogTitleId}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex-shrink-0 p-5 border-b border-white/10 bg-[#121212] z-10 relative">
              <div className="flex justify-between items-center mb-4">
                 <div>
-                    <h2 className="text-2xl font-black uppercase tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400">Débat Public</h2>
+                    <h2 id={dialogTitleId} className="text-2xl font-black uppercase tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400">Débat Public</h2>
                     <p className="text-xs text-gray-400 font-medium">Tendance basée sur {totalComments} avis</p>
                 </div>
                 <button 
@@ -155,9 +186,26 @@ const SentimentModal: React.FC<SentimentModalProps> = ({ sentiment, comments, on
                         {inputMode === 'positive' ? 'Votre avis positif' : 'Votre critique'}
                         <button type="button" onClick={() => { setInputMode('neutral'); setText(''); }} className="hover:text-white underline ml-2">Annuler</button>
                     </div>
+                    <div className="mb-3 flex flex-wrap gap-2">
+                        {(inputMode === 'positive' ? POSITIVE_SUGGESTIONS : NEGATIVE_SUGGESTIONS).map((suggestion) => (
+                            <button
+                                key={suggestion}
+                                type="button"
+                                onClick={() => handleSuggestionClick(suggestion)}
+                                className={`text-[10px] px-2 py-1 rounded-full border ${
+                                    inputMode === 'positive'
+                                        ? 'border-green-500/40 text-green-300 hover:bg-green-500/10'
+                                        : 'border-red-500/40 text-red-300 hover:bg-red-500/10'
+                                } transition-colors`}
+                            >
+                                {suggestion}
+                            </button>
+                        ))}
+                    </div>
                     <div className={`flex items-center bg-gray-900 rounded-xl border focus-within:ring-1 transition-all ${inputMode === 'positive' ? 'border-green-500/30 focus-within:ring-green-500' : 'border-red-500/30 focus-within:ring-red-500'}`}>
                         <input
                             type="text"
+                            ref={inputRef}
                             value={text}
                             onChange={(e) => setText(e.target.value)}
                             placeholder={inputMode === 'positive' ? "Pourquoi êtes-vous d'accord ?" : "Pourquoi n'êtes-vous pas d'accord ?"}

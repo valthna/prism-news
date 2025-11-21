@@ -1,0 +1,53 @@
+.shimmer {
+  animation: shimmer 2s infinite linear;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0) 100%);
+  background-size: 1000px 100%;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.hide-interface-button .eye-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.15));
+  transform-origin: center;
+}
+
+.hide-interface-button .eye-icon--visible {
+  animation: eyePulse 3.5s ease-in-out infinite;
+}
+
+.hide-interface-button .eye-icon--hidden {
+  animation: eyeBlink 2.1s ease-in-out infinite;
+}
+
+@keyframes eyePulse {
+  0% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.2));
+  }
+  50% {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.45));
+  }
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.2));
+  }
+}
+
+@keyframes eyeBlink {
+  0%, 85%, 100% {
+    transform: scaleY(1) scaleX(1);
+  }
+  90% {
+    transform: scaleY(0.2) scaleX(1.05);
+  }
+}

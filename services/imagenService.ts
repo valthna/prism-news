@@ -1,13 +1,13 @@
 import { GoogleGenAI } from "@google/genai";
 import { supabase } from './supabaseClient';
 
+export const SUPABASE_IMAGE_BUCKET = 'news-images';
+
 interface ImageGenerationOptions {
     prompt: string;
     aspectRatio?: "1:1" | "3:4" | "4:3" | "9:16" | "16:9";
     id?: string;
 }
-
-const SUPABASE_BUCKET = 'Images for prism';
 
 const sanitizeFilename = (input: string) =>
     input
@@ -50,7 +50,7 @@ const uploadImageToSupabase = async (dataUrl: string, identifier?: string): Prom
 
         const { error: uploadError } = await supabase
             .storage
-            .from(SUPABASE_BUCKET)
+            .from(SUPABASE_IMAGE_BUCKET)
             .upload(filePath, blob, {
                 cacheControl: '3600',
                 upsert: true,
@@ -64,7 +64,7 @@ const uploadImageToSupabase = async (dataUrl: string, identifier?: string): Prom
 
         const { data } = supabase
             .storage
-            .from(SUPABASE_BUCKET)
+            .from(SUPABASE_IMAGE_BUCKET)
             .getPublicUrl(filePath);
 
         return data?.publicUrl ?? null;
@@ -75,14 +75,62 @@ const uploadImageToSupabase = async (dataUrl: string, identifier?: string): Prom
 };
 
 /**
- * Service pour générer des caricatures satiriques avec Gemini 2.5 Flash Image (Nano Banana)
- * Modèle rapide et optimisé pour la génération d'images
+ * Service pour générer des caricatures satiriques avec Gemini 3 Pro Image Preview
+ * Modèle raisonneur optimisé pour les prompts multimodaux
  */
 export class ImagenService {
     private ai: GoogleGenAI;
 
     constructor(apiKey: string) {
         this.ai = new GoogleGenAI({ apiKey });
+    }
+
+    private async requestImage(enhancedPrompt: string, aspectRatio: ImageGenerationOptions['aspectRatio'], enableHighResolution: boolean) {
+        const requestPayload: Parameters<GoogleGenAI['models']['generateContent']>[0] = {
+            model: "gemini-3-pro-image-preview",
+            contents: [
+                {
+                    role: "user",
+                    parts: [{ text: enhancedPrompt }],
+                },
+            ],
+            config: {
+                responseModalities: ["IMAGE"],
+            },
+            tools: [{ googleSearch: {} }],
+        };
+
+        if (enableHighResolution) {
+            (requestPayload.config as any).mediaResolution = "MEDIA_RESOLUTION_HIGH";
+        }
+
+        if (aspectRatio) {
+            (requestPayload.config as any).imageConfig = {
+                aspectRatio,
+                imageSize: enableHighResolution ? "4K" : "2K",
+            };
+        }
+
+        const response = await this.ai.models.generateContent(requestPayload);
+
+        if (response.candidates && response.candidates.length > 0) {
+            const parts = response.candidates[0].content.parts;
+            for (const part of parts) {
+                if (part.inlineData) {
+                    const imageData = part.inlineData.data;
+                    const dataUrl = `data:image/png;base64,${imageData}`;
+                    return dataUrl;
+                }
+            }
+        }
+
+        throw new Error("Aucune image générée dans la réponse");
+    }
+
+    private isMediaResolutionDisabledError(error: unknown): boolean {
+        if (!error) return false;
+        const message = error instanceof Error ? error.message : typeof error === 'string' ? error : JSON.stringify(error);
+        return /media resolution is not enabled/i.test(message || '');
     }
 
     /**
@@ -93,43 +141,28 @@ export class ImagenService {
     async generateCaricature(options: ImageGenerationOptions): Promise<string> {
         const {
             prompt,
-            aspectRatio = "16:9",
+            aspectRatio = "3:4",
             id,
         } = options;
 
         // Enrichissement du prompt pour le style caricature
-        const caricatureStylePrompt = "Political satire cartoon in the style of French press illustrators (Plantu, Cabu, Wolinski). Black ink drawing, editorial cartoon, satirical illustration.";
-        const styleDetails = "Style: bold lines, exaggerated features, minimalist, newspaper editorial style, high contrast black and white with selective color accents.";
-        const enhancedPrompt = `${caricatureStylePrompt} Subject: ${prompt}. ${styleDetails}`;
+        const caricatureStylePrompt = "Premium background for a PRISM news tile inspired by iconic French newspaper caricatures (Plantu, Cabu, Wolinski, Le Canard Enchaîné).";
+        const sceneDirection = "Scene direction: elegant 3:4 portrait framing, layered depth, subtle newsprint textures, generous negative space for overlay, dynamic diagonals.";
+        const artDirection = "Art direction: expressive black ink linework with selective watercolor washes, bold silhouettes, witty symbolism, satirical yet respectful tone, impactful and highly critical humor, accurate likeness of public figures, intricate detailing, selective accent colors.";
+        const qualityAndNegative = "Quality: ultra high resolution, crisp edges, micro-texture detailing, clean gradients, no typography, no UI elements, no logos, no photographic realism. Negative prompt: avoid 3D renders, CGI artifacts, gore, watermarks, offensive caricature tropes.";
+        const enhancedPrompt = `Subject: ${prompt}. ${caricatureStylePrompt} ${sceneDirection} ${artDirection} ${qualityAndNegative}`;
 
         try {
-            const response = await this.ai.models.generateContent({
-                model: "gemini-2.5-flash-image", // Nano Banana 🍌
-                contents: enhancedPrompt,
-                config: {
-                    responseModalities: ['Image'], // Seulement l'image, pas de texte
-                    imageConfig: {
-                        aspectRatio,
-                    },
-                },
-            });
-
-            // Extraire l'image de la réponse
-            if (response.candidates && response.candidates.length > 0) {
-                const parts = response.candidates[0].content.parts;
-                for (const part of parts) {
-                    if (part.inlineData) {
-                        const imageData = part.inlineData.data;
-                        // Convertir en data URL utilisable dans le DOM
-                        const dataUrl = `data:image/png;base64,${imageData}`;
-                        const uploadedUrl = await uploadImageToSupabase(dataUrl, id ?? prompt);
-                        return uploadedUrl ?? dataUrl;
-                    }
-                }
-            }
-
-            throw new Error("Aucune image générée dans la réponse");
+            const dataUrl = await this.requestImage(enhancedPrompt, aspectRatio, true);
+            const uploadedUrl = await uploadImageToSupabase(dataUrl, id ?? prompt);
+            return uploadedUrl ?? dataUrl;
         } catch (error) {
+            if (this.isMediaResolutionDisabledError(error)) {
+                console.warn("[PRISM] Gemini ne permet pas la haute résolution sur ce modèle. Tentative avec la résolution standard.");
+                const dataUrl = await this.requestImage(enhancedPrompt, aspectRatio, false);
+                const uploadedUrl = await uploadImageToSupabase(dataUrl, id ?? prompt);
+                return uploadedUrl ?? dataUrl;
+            }
             console.error("Erreur lors de la génération avec Gemini Image:", error);
             throw error;
         }
@@ -161,9 +194,20 @@ export class ImagenService {
 // Instance singleton avec la clé API
 let imagenServiceInstance: ImagenService | null = null;
 
+const resolveApiKey = (): string | undefined => {
+    const isBrowser = typeof window !== 'undefined';
+    if (!isBrowser && typeof process !== 'undefined' && process.env?.API_KEY) {
+        return process.env.API_KEY;
+    }
+    if (typeof import.meta !== 'undefined' && (import.meta as any)?.env?.VITE_API_KEY) {
+        return (import.meta as any).env.VITE_API_KEY as string;
+    }
+    return undefined;
+};
+
 export const getImagenService = (): ImagenService => {
     if (!imagenServiceInstance) {
-        const apiKey = process.env.API_KEY;
+        const apiKey = resolveApiKey();
         if (!apiKey) {
             throw new Error("API_KEY non définie");
         }

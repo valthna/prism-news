@@ -13,6 +13,10 @@ create policy "Authenticated Upload"
   on storage.objects for insert
   with check ( bucket_id = 'news-images' );
 
+create policy "Cleanup old news images"
+  on storage.objects for delete
+  using ( bucket_id = 'news-images' );
+
 -- Enable RLS on AI tables
 alter table ai_models enable row level security;
 alter table model_metrics enable row level security;
@@ -50,5 +54,5 @@ on conflict (id) do nothing;
 
 insert into ai_models (id, name, version, provider, description)
 values 
-  ('22222222-2222-2222-2222-222222222222', 'gemini-2.5-flash-image', '2.5', 'Google', 'Fast image generation (Nano Banana)')
+  ('22222222-2222-2222-2222-222222222222', 'gemini-3-pro-image-preview', '3', 'Google', 'High-fidelity editorial image generation (4K)')
 on conflict (id) do nothing;

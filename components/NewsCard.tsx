@@ -21,7 +21,7 @@ const mobileHorizontalSafeArea: React.CSSProperties = {
 };
 
 const cardContentSafeArea: React.CSSProperties = {
-  '--safe-area-top': 'clamp(4.75rem, 7vw, 6.5rem)',
+  '--safe-area-top': 'var(--card-content-safe-area-top, clamp(4.75rem, 7vw, 6.5rem))',
   '--safe-area-bottom': 'clamp(2rem, 4vw, 3rem)'
 };
 
@@ -88,6 +88,11 @@ const NewsCard: React.FC<NewsCardProps> = ({
     : pollinationsUrl;
   const [imageSrc, setImageSrc] = useState<string>(initialSrc);
   const [imageLoaded, setImageLoaded] = useState(false);
+
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageSrc(initialSrc);
+  }, [initialSrc]);
 
   const cardRef = useRef<HTMLDivElement>(null);
   const reliabilityInfoRef = useRef<HTMLDivElement>(null);
@@ -329,12 +334,12 @@ const NewsCard: React.FC<NewsCardProps> = ({
               filter: isIntersecting ? 'contrast(1.1) saturate(1.1)' : 'grayscale(100%)',
             }}
           />
-          <div className="absolute inset-x-0 top-0 h-3/4 bg-gradient-to-b from-black/80 via-black/40 to-transparent opacity-90 z-10 pointer-events-none"></div>
-          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black via-black/90 to-transparent z-10"></div>
+          <div className="absolute inset-x-0 top-0 h-[60%] bg-gradient-to-b from-black/60 via-black/20 to-transparent opacity-80 z-10 pointer-events-none"></div>
+          <div className="absolute inset-x-0 bottom-0 h-[45%] bg-gradient-to-t from-black/70 via-black/30 to-transparent opacity-75 z-10 pointer-events-none"></div>
         </div>
 
         <div
-          className={`absolute inset-0 z-30 flex flex-col pb-safe-bottom pointer-events-none transition-opacity duration-300 safe-area-top safe-area-bottom ${isInterfaceHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+          className={`absolute inset-0 z-30 flex flex-col pb-safe-bottom pointer-events-none transition-opacity duration-300 safe-area-top safe-area-bottom card-content-shell ${isInterfaceHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
           style={cardContentSafeArea}
         >
           <div
@@ -501,6 +506,10 @@ const NewsCard: React.FC<NewsCardProps> = ({
                   <img
                     src={imageSrc}
                     alt="Article Poster"
+                    loading="lazy"
+                    decoding="async"
+                    onLoad={() => setImageLoaded(true)}
+                    onError={handleImageError}
                     className="absolute inset-0 w-full h-full object-cover z-10"
                   />
                   <div className="absolute inset-0 bg-noise opacity-20 mix-blend-overlay z-20"></div>

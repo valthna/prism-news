@@ -33,6 +33,16 @@ body {
   padding-bottom: var(--safe-area-bottom, 0px);
 }
 
+.card-content-shell {
+  --card-content-safe-area-top: clamp(4.75rem, 7vw, 6.5rem);
+}
+
+@media (min-width: 1024px) {
+  .card-content-shell {
+    --card-content-safe-area-top: clamp(2.5rem, 3vw, 3.5rem);
+  }
+}
+
 @supports (padding: env(safe-area-inset-top)) {
   .safe-area-x {
     padding-left: calc(var(--safe-area-x, 0px) + env(safe-area-inset-left));
@@ -76,7 +86,7 @@ body::after {
   opacity: 0.035;
   pointer-events: none;
   z-index: 9999;
-  animation: grain 8s steps(10) infinite;
+  animation: grain 18s steps(10) infinite;
   mix-blend-mode: overlay;
 }
 

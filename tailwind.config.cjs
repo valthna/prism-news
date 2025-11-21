@@ -32,7 +32,7 @@ module.exports = {
         'fade-in': 'fadeIn 0.6s ease-out forwards',
         'slide-up': 'slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         float: 'float 6s ease-in-out infinite',
-        grain: 'grain 8s steps(10) infinite',
+        grain: 'grain 18s steps(10) infinite',
       },
       keyframes: {
         fadeIn: {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { SearchIcon } from './icons/SearchIcon';
 import { CloseIcon } from './icons/CloseIcon';
-import { CATEGORY_OPTIONS, getCategoryOption } from '../constants/categories';
+import { getCategoryOption } from '../constants/categories';
 
 interface SearchOverlayProps {
     isOpen: boolean;
@@ -97,18 +97,20 @@ const SearchOverlay: React.FC<SearchOverlayProps> = ({ isOpen, onClose, onSearch
 
                 <div className="p-8 space-y-8">
                     <h2 id={titleId} className="sr-only">Recherche avancée PRISM</h2>
-                    <form onSubmit={handleSubmit} className="relative group space-y-3">
-                        <div className="absolute inset-y-0 left-0 flex items-center pointer-events-none">
-                            <SearchIcon className="h-8 w-8 text-gray-500 group-focus-within:text-neon-accent transition-colors duration-300" />
+                    <form onSubmit={handleSubmit} className="space-y-3">
+                        <div className="group flex items-center gap-4 rounded-3xl border border-white/10 bg-white/5 px-5 py-4 shadow-[0_15px_35px_rgba(0,0,0,0.35)] focus-within:border-neon-accent/80 focus-within:bg-black/40 transition-all duration-300">
+                            <div className="w-12 h-12 rounded-full border border-white/15 bg-black/40 flex items-center justify-center shadow-inner">
+                                <SearchIcon className="h-6 w-6 text-gray-400 group-focus-within:text-neon-accent transition-colors duration-300" />
+                            </div>
+                            <input
+                                type="text"
+                                className="flex-1 bg-transparent text-3xl font-light text-white placeholder-gray-600 focus:outline-none font-sans tracking-tight"
+                                placeholder="Rechercher un sujet..."
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                autoFocus
+                            />
                         </div>
-                        <input
-                            type="text"
-                            className="block w-full pl-14 pr-4 py-2 bg-transparent border-b-2 border-white/10 text-3xl font-light text-white placeholder-gray-600 focus:outline-none focus:border-neon-accent transition-all duration-300 font-sans tracking-tight"
-                            placeholder="Rechercher un sujet..."
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            autoFocus
-                        />
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs font-mono text-gray-500 gap-2">
                             <span>Catégorie active : <span className="text-white/90">{activeCategory.emoji} {activeCategory.value}</span></span>
                             <span className="text-neon-accent/80">PRISM préparera 5 cartes équilibrées</span>
@@ -134,25 +136,6 @@ const SearchOverlay: React.FC<SearchOverlayProps> = ({ isOpen, onClose, onSearch
                             </div>
                         </div>
                     )}
-
-                    <div className="space-y-4">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em]">Explorer par catégorie</label>
-                        <div className="flex flex-wrap gap-2">
-                            {CATEGORY_OPTIONS.map((cat) => (
-                                <button
-                                    key={cat.value}
-                                    onClick={() => setSelectedCategory(cat.value)}
-                                    className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 border ${selectedCategory === cat.value
-                                            ? 'bg-neon-accent text-black border-neon-accent shadow-[0_0_20px_rgba(50,173,230,0.4)] scale-105'
-                                            : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10 hover:border-white/10 hover:text-white'
-                                        }`}
-                                >
-                                    <span className="mr-2">{cat.emoji}</span>
-                                    {cat.value}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
 
                     <div className="space-y-4">
                         <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em]">Focus du moment</label>

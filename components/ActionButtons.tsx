@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ThumbsUpIcon } from './icons/ThumbsUpIcon';
 import { ShareIcon } from './icons/ShareIcon';
 import { NewsArticle } from '../types';
@@ -93,41 +93,61 @@ interface ActionButtonsProps {
 }
 
 const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment, className = "", communityStats }) => {
-    const [showReactions, setShowReactions] = useState(false);
-    const [selectedReaction, setSelectedReaction] = useState<{ emoji: string, label: string, color: string } | null>(null);
-    const [animateReaction, setAnimateReaction] = useState(false);
-    const [reactionCount, setReactionCount] = useState(0);
-    const [isShaking, setIsShaking] = useState(false);
-    const hoverTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-
-    const isRow = className.includes('flex-row');
-
-    // Initialize random count for demo purposes
-    useEffect(() => {
-        setReactionCount(Math.floor(Math.random() * 200) + 42);
-    }, []);
-
-    const reactions = [
+    const reactions = useMemo(() => ([
         { emoji: '🔥', label: 'Top', id: 'fire', color: 'text-orange-500', glowColor: '#f97316' },
         { emoji: '🤯', label: 'Choc', id: 'shock', color: 'text-purple-400', glowColor: '#a855f7' },
         { emoji: '🤔', label: 'Doute', id: 'doubt', color: 'text-yellow-400', glowColor: '#eab308' },
         { emoji: '😡', label: 'Colère', id: 'angry', color: 'text-red-500', glowColor: '#ef4444' },
         { emoji: '👏', label: 'Bravo', id: 'clap', color: 'text-green-400', glowColor: '#22c55e' },
-    ];
+    ]), []);
+
+    const [showReactions, setShowReactions] = useState(false);
+    const [selectedReaction, setSelectedReaction] = useState<{ emoji: string, label: string, color: string, id: string, glowColor: string } | null>(null);
+    const [animateReaction, setAnimateReaction] = useState(false);
+    const [communityReactionCounts, setCommunityReactionCounts] = useState<Record<string, number>>(() => {
+        const counts: Record<string, number> = {};
+        reactions.forEach((reaction) => {
+            counts[reaction.id] = Math.floor(Math.random() * 160) + 40;
+        });
+        return counts;
+    });
+    const [isShaking, setIsShaking] = useState(false);
+    const hoverTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+    const isRow = className.includes('flex-row');
+
+    const totalCommunityReactions = useMemo(
+        () => Object.values(communityReactionCounts).reduce((total, value) => total + value, 0),
+        [communityReactionCounts]
+    );
+
+    const showReactionCounts = Boolean(selectedReaction);
 
     const handleReaction = (r: typeof reactions[0]) => {
-        if (selectedReaction?.id === r.id) {
+        const previousReaction = selectedReaction;
+
+        if (previousReaction?.id === r.id) {
             setSelectedReaction(null);
-            setReactionCount(prev => prev - 1);
+            setCommunityReactionCounts(prevCounts => {
+                const updated = { ...prevCounts };
+                updated[r.id] = Math.max(0, (updated[r.id] ?? 0) - 1);
+                return updated;
+            });
         } else {
-            if (!selectedReaction) setReactionCount(prev => prev + 1);
             setSelectedReaction(r);
             setAnimateReaction(true);
             setIsShaking(true);
             setTimeout(() => setAnimateReaction(false), 1000);
             setTimeout(() => setIsShaking(false), 300);
+            setCommunityReactionCounts(prevCounts => {
+                const updated = { ...prevCounts };
+                if (previousReaction) {
+                    updated[previousReaction.id] = Math.max(0, (updated[previousReaction.id] ?? 0) - 1);
+                }
+                updated[r.id] = (updated[r.id] ?? 0) + 1;
+                return updated;
+            });
         }
-        setShowReactions(false);
     };
 
     const handleMouseEnter = () => {
@@ -140,9 +160,6 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
             setShowReactions(false);
         }, 300);
     };
-
-    const totalCommunityVotes = (communityStats?.positive ?? 0) + (communityStats?.negative ?? 0);
-    const positiveRatio = totalCommunityVotes > 0 ? Math.round((communityStats!.positive / totalCommunityVotes) * 100) : 50;
 
     return (
         <div className={`flex ${isRow ? 'flex-row' : 'flex-col'} items-center gap-4 relative z-40 ${className}`}>
@@ -185,31 +202,39 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                 `}>
                     <div className="absolute top-full left-0 w-full h-4 bg-transparent"></div>
 
-                    {reactions.map((r) => (
-                        <button
-                            key={r.id}
-                            onClick={() => handleReaction(r)}
-                            className="group/emoji relative p-2 rounded-full hover:bg-white/10 transition-all duration-200"
-                        >
-                            <span className={`
-                                block text-2xl transform transition-transform duration-200 cubic-bezier(0.34, 1.56, 0.64, 1)
-                                group-hover/emoji:scale-150 group-hover/emoji:-translate-y-1
-                                ${selectedReaction?.id === r.id ? 'scale-125' : ''}
-                            `}>
-                                {r.emoji}
-                            </span>
-                            <span className={`
-                                absolute -top-8 left-1/2 -translate-x-1/2 
-                                text-[10px] font-bold uppercase tracking-wider 
-                                bg-black px-2 py-1 rounded text-white 
-                                opacity-0 group-hover/emoji:opacity-100 
-                                transition-opacity duration-200 pointer-events-none
-                                whitespace-nowrap
-                            `}>
-                                {r.label}
-                            </span>
-                        </button>
-                    ))}
+                    {reactions.map((r) => {
+                        const count = communityReactionCounts[r.id] ?? 0;
+                        return (
+                            <button
+                                key={r.id}
+                                onClick={() => handleReaction(r)}
+                                className="group/emoji relative p-2 rounded-full hover:bg-white/10 transition-all duration-200"
+                            >
+                                <span className={`
+                                    block text-2xl transform transition-transform duration-200 cubic-bezier(0.34, 1.56, 0.64, 1)
+                                    group-hover/emoji:scale-150 group-hover/emoji:-translate-y-1
+                                    ${selectedReaction?.id === r.id ? 'scale-125' : ''}
+                                `}>
+                                    {r.emoji}
+                                </span>
+                                <span className={`
+                                    absolute -top-8 left-1/2 -translate-x-1/2 
+                                    text-[10px] font-bold uppercase tracking-wider 
+                                    bg-black px-2 py-1 rounded text-white 
+                                    opacity-0 group-hover/emoji:opacity-100 
+                                    transition-opacity duration-200 pointer-events-none
+                                    whitespace-nowrap
+                                `}>
+                                    {r.label}
+                                </span>
+                                {showReactionCounts && (
+                                    <span className="absolute -bottom-2 right-0 bg-white text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-lg border border-black/10 pointer-events-none">
+                                        {count.toLocaleString('fr-FR')}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
 
                 <div className={`${isShaking ? 'animate-shake' : ''}`}>
@@ -217,7 +242,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                         label={selectedReaction ? "VOTÉ" : "RÉAGIR"}
                         onClick={() => setShowReactions(!showReactions)}
                         activeColor={selectedReaction?.glowColor}
-                        counter={reactionCount}
+                        counter={totalCommunityReactions}
                     >
                         <div className={`transform transition-transform duration-300 ${animateReaction ? 'scale-125' : ''}`}>
                             {selectedReaction ? (
@@ -230,6 +255,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                         </div>
                     </ActionButton>
                 </div>
+
             </div>
 
             <style>{`

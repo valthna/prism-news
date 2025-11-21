@@ -23,15 +23,24 @@ const LOADING_PHASES = [
     { until: PROGRESS_CAP_BEFORE_COMPLETION + 1, label: "Génération Synthèse" }
 ];
 
+type FetchMode = 'replace' | 'prepend';
+type FetchOptions = {
+    mode?: FetchMode;
+    prependWith?: NewsArticle[];
+    focusOnFirst?: boolean;
+};
+
 // --- PRODUCTION GRADE LOADING SCREEN WITH VORTEX ---
 
 const LoadingScreen: React.FC<{ status: string, count: number }> = ({ status, count }) => {
     // Create random particles for vortex effect
     const particles = useMemo(() => {
         const types = ['article', 'video', 'image', 'audio', 'data', 'news'];
+        const sizeVariants = [0.35, 0.55, 0.75, 1, 1.35, 1.7, 2.1];
         return Array.from({ length: 40 }).map((_, i) => {
             const angle = (i / 40) * 2 * Math.PI;
             const distance = 60 + Math.random() * 40; // Start further out
+            const visualScale = sizeVariants[Math.floor(Math.random() * sizeVariants.length)];
             return {
                 id: i,
                 type: types[Math.floor(Math.random() * types.length)],
@@ -40,7 +49,8 @@ const LoadingScreen: React.FC<{ status: string, count: number }> = ({ status, co
                 delay: Math.random() * 2,
                 duration: 3 + Math.random() * 2,
                 rotation: Math.random() * 360,
-                scale: 0.8 + Math.random() * 0.4,
+                scale: 0.7 + Math.random() * 1.1,
+                visualScale,
                 color: Math.random() > 0.5 ? 'bg-blue-500' : 'bg-white'
             };
         });
@@ -119,7 +129,10 @@ const LoadingScreen: React.FC<{ status: string, count: number }> = ({ status, co
                                 '--scale': p.scale
                             } as React.CSSProperties}
                         >
-                            <div className="transform -translate-x-1/2 -translate-y-1/2">
+                            <div
+                                className="transform-gpu"
+                                style={{ transform: `translate(-50%, -50%) scale(${p.visualScale})` }}
+                            >
                                 {getParticleContent(p.type)}
                             </div>
                         </div>
@@ -207,6 +220,7 @@ const App: React.FC = () => {
     const [currentCategory, setCurrentCategory] = useState<string>(DEFAULT_CATEGORY.value);
     const [currentQuery, setCurrentQuery] = useState<string>('');
     const [isInterfaceHidden, setIsInterfaceHidden] = useState<boolean>(false);
+    const [isSearchLoading, setIsSearchLoading] = useState<boolean>(false);
 
     // Loading State
     const [loadingStatus, setLoadingStatus] = useState(LOADING_PHASES[0].label);
@@ -217,6 +231,7 @@ const App: React.FC = () => {
     const loadingStartRef = useRef<number | null>(null);
     const averageLoadDurationRef = useRef(DEFAULT_LOAD_DURATION_MS);
     const activeLoadDurationRef = useRef(DEFAULT_LOAD_DURATION_MS);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     const updateStatusByProgress = useCallback((progressPercent: number) => {
         const phase = LOADING_PHASES.find((step) => progressPercent < step.until);
@@ -306,42 +321,82 @@ const App: React.FC = () => {
         };
     }, [cleanupProgressTimer, cancelCompletionAnimation]);
 
-    const getArticles = useCallback(async (query?: string, category?: string) => {
+    const scrollToTop = useCallback(() => {
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    }, []);
+
+    const getArticles = useCallback(async (query?: string, category?: string, options: FetchOptions = {}) => {
+        const mode = options.mode ?? 'replace';
+        const replaceExisting = mode === 'replace';
+        const mergeWithExisting = (incoming: NewsArticle[]): NewsArticle[] => {
+            if (options.prependWith && options.prependWith.length > 0) {
+                const existingIds = new Set(incoming.map(article => article.id));
+                const preserved = options.prependWith.filter(article => !existingIds.has(article.id));
+                return [...incoming, ...preserved];
+            }
+            return incoming;
+        };
         try {
-            setLoading(true);
-            setError(null);
-            setArticles([]); // Clear previous articles to show loading screen properly
-            startLoadingProgress();
+            if (replaceExisting) {
+                setLoading(true);
+                setError(null);
+                setArticles([]); // Clear previous articles to show loading screen properly
+                startLoadingProgress();
+            }
 
             const fetchedArticles = await fetchNewsArticles(query, category);
 
-            if (loadingStartRef.current) {
-                const elapsed = performance.now() - loadingStartRef.current;
-                const safeElapsed = Math.max(elapsed, 800);
-                averageLoadDurationRef.current = (averageLoadDurationRef.current * 0.6) + (safeElapsed * 0.4);
+            if (replaceExisting) {
+                if (loadingStartRef.current) {
+                    const elapsed = performance.now() - loadingStartRef.current;
+                    const safeElapsed = Math.max(elapsed, 800);
+                    averageLoadDurationRef.current = (averageLoadDurationRef.current * 0.6) + (safeElapsed * 0.4);
+                }
+
+                animateCompletion();
+
+                setTimeout(() => {
+                    const preparedArticles = mergeWithExisting(fetchedArticles);
+                    setArticles(preparedArticles);
+                    if (options.focusOnFirst) {
+                        setActiveArticleIndex(0);
+                        scrollToTop();
+                    }
+                    setLoading(false);
+                }, 400);
+            } else {
+                const searchBatch = fetchedArticles.slice(0, 5);
+                setArticles((previous) => {
+                    const existingIds = new Set(previous.map((article) => article.id));
+                    const uniqueArticles = searchBatch.filter((article) => !existingIds.has(article.id));
+                    if (uniqueArticles.length === 0) {
+                        return previous;
+                    }
+                    return [...uniqueArticles, ...previous];
+                });
             }
-
-            animateCompletion();
-
-            setTimeout(() => {
-                setArticles(fetchedArticles);
-                setLoading(false);
-            }, 400);
 
         } catch (err) {
             console.error(err);
-            cleanupProgressTimer();
-            cancelCompletionAnimation();
-            loadingStartRef.current = null;
-            setProcessedCount(0);
-            if (err instanceof Error) {
-                setError(err.message);
-            } else {
-            setError('Erreur système inconnue.');
+            if (replaceExisting) {
+                cleanupProgressTimer();
+                cancelCompletionAnimation();
+                loadingStartRef.current = null;
+                setProcessedCount(0);
+                if (err instanceof Error) {
+                    setError(err.message);
+                } else {
+                    setError('Erreur système inconnue.');
+                }
+                setLoading(false);
             }
-            setLoading(false);
+        } finally {
         }
-    }, [startLoadingProgress, animateCompletion, cleanupProgressTimer, cancelCompletionAnimation]);
+    }, [startLoadingProgress, animateCompletion, cleanupProgressTimer, cancelCompletionAnimation, scrollToTop]);
 
     const hasFetchedRef = useRef(false);
 
@@ -353,12 +408,26 @@ const App: React.FC = () => {
         getArticles();
     }, [getArticles]);
 
-    const handleSearch = (query: string, category: string) => {
+    const handleSearch = useCallback((query: string, category: string) => {
         const normalizedQuery = query.trim();
+        if (!normalizedQuery || isSearchLoading) {
+            return;
+        }
+        setIsSearchLoading(true);
         setCurrentQuery(normalizedQuery);
         setCurrentCategory(category);
-        getArticles(normalizedQuery || undefined, category);
-    };
+        (async () => {
+            try {
+                await getArticles(normalizedQuery, category, {
+                    mode: 'replace',
+                    prependWith: articles,
+                    focusOnFirst: true
+                });
+            } finally {
+                setIsSearchLoading(false);
+            }
+        })();
+    }, [getArticles, isSearchLoading, articles]);
 
     const handleCategoryFilterChange = useCallback((category: string) => {
         if (category === currentCategory) {
@@ -437,10 +506,34 @@ const App: React.FC = () => {
                     />
                     <button
                         onClick={() => setIsSearchOpen(true)}
-                        className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-center hover:bg-white/20 transition-colors group shadow-lg touch-target"
+                        disabled={isSearchLoading}
+                        className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-center hover:bg-white/20 transition-colors group shadow-lg touch-target disabled:opacity-60 disabled:cursor-not-allowed"
                         aria-label="Rechercher"
+                        aria-busy={isSearchLoading}
                     >
-                        <SearchIcon className="w-4 h-4 text-gray-300 group-hover:text-white transition-colors" />
+                        {isSearchLoading ? (
+                            <svg
+                                className="w-4 h-4 animate-spin text-neon-accent"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                            >
+                                <circle
+                                    className="opacity-25"
+                                    cx="12"
+                                    cy="12"
+                                    r="10"
+                                    stroke="currentColor"
+                                    strokeWidth="4"
+                                />
+                                <path
+                                    className="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                                />
+                            </svg>
+                        ) : (
+                            <SearchIcon className="w-4 h-4 text-gray-300 group-hover:text-white transition-colors" />
+                        )}
                     </button>
                     <button
                         onClick={() => setIsSettingsOpen(true)}
@@ -452,7 +545,11 @@ const App: React.FC = () => {
                 </div>
             </div>
 
-            <main className="h-full w-full overflow-y-scroll snap-y snap-mandatory scroll-smooth no-scrollbar" style={{ scrollBehavior: 'smooth' }}>
+            <main
+                ref={scrollContainerRef}
+                className="h-full w-full overflow-y-scroll snap-y snap-mandatory scroll-smooth no-scrollbar"
+                style={{ scrollBehavior: 'smooth' }}
+            >
                 {articles.map((article) => (
                     <NewsCard
                         key={article.id}

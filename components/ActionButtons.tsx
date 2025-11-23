@@ -16,8 +16,9 @@ const ActionButton: React.FC<{
     onClick?: () => void,
     extraClass?: string,
     activeColor?: string,
-    counter?: number
-}> = ({ children, label, onClick, extraClass = "", activeColor, counter }) => {
+    counter?: number,
+    minimal?: boolean
+}> = ({ children, label, onClick, extraClass = "", activeColor, counter, minimal }) => {
     const glowStyles: React.CSSProperties | undefined = activeColor
         ? {
             boxShadow: `0 0 24px ${activeColor}`,
@@ -25,58 +26,39 @@ const ActionButton: React.FC<{
         }
         : undefined;
 
-    const glowOverlayStyle: React.CSSProperties | undefined = activeColor
-        ? { backgroundColor: activeColor }
-        : undefined;
-
-    return (
+    const ButtonContent = (
         <button
             onClick={onClick}
-            className={`flex flex-col items-center text-white space-y-2 group disabled:opacity-50 relative ${extraClass}`}
+            className={`glass-button btn-icon w-9 h-9 relative disabled:opacity-50 transition-transform active:scale-95 ${minimal ? 'hover:bg-white/10' : ''}`}
             disabled={!onClick}
+            style={glowStyles}
+            title={label}
         >
-            <div className="relative">
-                <div className={`
-                center-perfect 
-                relative p-3.5 rounded-2xl 
-                min-w-[48px] min-h-[48px]
-                bg-white/10 backdrop-blur-xl 
-                border border-white/20 
-                shadow-[0_8px_24px_rgba(0,0,0,0.4)] 
-                group-hover:bg-white/20 group-hover:border-white/40 
-                group-hover:shadow-[0_12px_32px_rgba(0,0,0,0.5)]
-                group-active:scale-[0.92]
-                transition-all duration-500 cubic-bezier(0.175, 0.885, 0.32, 1.275) /* Spring physics */
-                overflow-hidden
-            `} style={glowStyles}>
-                {/* Inner Shine */}
-                <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-
-                {/* Active Glow Background */}
-                {activeColor && (
-                    <div className="absolute inset-0 opacity-25 blur-md" style={glowOverlayStyle}></div>
-                )}
-
-                {/* Content */}
-                <div className={`relative z-10 transition-all duration-300 ${activeColor ? 'text-white scale-105' : 'group-hover:text-neon-accent group-hover:scale-105'}`}>
-                    {children}
-                </div>
+            {/* Content */}
+            <div className={`relative z-10 transition-all duration-300 flex items-center justify-center ${activeColor ? 'text-white scale-105' : 'group-hover:text-neon-accent group-hover:scale-110'}`}>
+                {React.cloneElement(children as React.ReactElement, { className: "w-4 h-4" })}
             </div>
 
-            {/* Counter Badge - Absolute Positioned for Alignment */}
+            {/* Counter Badge */}
             {counter !== undefined && (
-                <div className="absolute -top-2 -right-2 bg-white text-black text-[10px] font-bold px-2 py-1 rounded-full shadow-xl border border-black/10 transform scale-0 group-hover:scale-100 transition-transform duration-200 z-20 min-w-[20px] text-center">
+                <div className="absolute -top-1 -right-1 bg-white text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-xl border border-black/10 transform scale-0 group-hover:scale-100 transition-transform duration-200 z-20 min-w-[18px] text-center">
                     {counter}
                 </div>
             )}
-            </div>
-
-            <div className="flex flex-col items-center">
-                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-gray-300 group-hover:text-white transition-colors duration-200">
-                    {label}
-                </span>
-            </div>
         </button>
+    );
+
+    if (minimal) {
+        return <div className={`group ${extraClass}`}>{ButtonContent}</div>;
+    }
+
+    return (
+        <div className={`flex flex-col items-center gap-2 group ${extraClass}`}>
+            {ButtonContent}
+            <span className="text-[8px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-white transition-colors duration-200">
+                {label}
+            </span>
+        </div>
     );
 };
 
@@ -92,7 +74,7 @@ interface ActionButtonsProps {
     communityStats?: CommunityStats;
 }
 
-const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment, className = "", communityStats }) => {
+const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment, className = "", communityStats, minimal }) => {
     const reactions = useMemo(() => ([
         { emoji: '🔥', label: 'Top', id: 'fire', color: 'text-orange-500', glowColor: '#f97316' },
         { emoji: '🤯', label: 'Choc', id: 'shock', color: 'text-purple-400', glowColor: '#a855f7' },
@@ -162,7 +144,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
     };
 
     return (
-        <div className={`flex ${isRow ? 'flex-row' : 'flex-col'} items-center gap-4 relative z-40 ${className}`}>
+        <div className={`flex ${minimal ? 'flex-row' : (isRow ? 'flex-row' : 'flex-col')} items-center gap-4 relative z-40 ${className}`}>
             {animateReaction && selectedReaction && (
                 <div className="absolute bottom-16 right-0 z-50 pointer-events-none w-full flex justify-center">
                     <div className="relative">
@@ -179,59 +161,59 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                 </div>
             )}
 
-            <div className="flex flex-col items-center gap-2">
-                <ActionButton label="DÉBAT" onClick={onShowSentiment}>
-                    <OpinionIcon className="w-6 h-6" />
-                </ActionButton>
-            </div>
+            <ActionButton label="DÉBAT" onClick={onShowSentiment} minimal={minimal}>
+                <OpinionIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </ActionButton>
 
-            <div className="relative flex flex-col items-center"
+            <div className="relative"
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
             >
                 <div className={`
-                    absolute bottom-full mb-2 
-                    ${isRow ? 'left-1/2 -translate-x-1/2' : 'right-0 origin-bottom-right'}
-                    flex items-center gap-1 p-2 
-                    bg-black/60 backdrop-blur-2xl 
-                    rounded-full border border-white/10 
-                    shadow-[0_8px_32px_rgba(0,0,0,0.5)] 
-                    transition-all duration-300 origin-bottom
-                    ${showReactions ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-75 translate-y-4 pointer-events-none'}
-                    z-50
+                    absolute bottom-full mb-4 
+                    left-1/2 -translate-x-1/2
+                    flex items-center gap-1.5 p-1.5 pr-2.5 pl-2.5
+                    bg-black/80 backdrop-blur-xl 
+                    rounded-full border border-white/15 
+                    shadow-[0_8px_32px_rgba(0,0,0,0.6)] 
+                    transition-all duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)
+                    origin-bottom
+                    ${showReactions ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-90 translate-y-4 pointer-events-none'}
+                    z-50 whitespace-nowrap
                 `}>
                     <div className="absolute top-full left-0 w-full h-4 bg-transparent"></div>
 
                     {reactions.map((r) => {
                         const count = communityReactionCounts[r.id] ?? 0;
+                        const isSelected = selectedReaction?.id === r.id;
                         return (
                             <button
                                 key={r.id}
-                                onClick={() => handleReaction(r)}
-                                className="group/emoji relative p-2 rounded-full hover:bg-white/10 transition-all duration-200"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleReaction(r);
+                                }}
+                                className="group/emoji relative p-1.5 rounded-full hover:bg-white/10 transition-all duration-200 flex flex-col items-center"
                             >
                                 <span className={`
-                                    block text-2xl transform transition-transform duration-200 cubic-bezier(0.34, 1.56, 0.64, 1)
-                                    group-hover/emoji:scale-150 group-hover/emoji:-translate-y-1
-                                    ${selectedReaction?.id === r.id ? 'scale-125' : ''}
+                                    block text-2xl transform transition-transform duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)
+                                    group-hover/emoji:scale-125 group-hover/emoji:-translate-y-1 group-active/emoji:scale-95
+                                    ${isSelected ? 'scale-110 drop-shadow-glow' : 'scale-100 grayscale-[0.3] hover:grayscale-0'}
                                 `}>
                                     {r.emoji}
                                 </span>
+                                
+                                {/* Label au survol */}
                                 <span className={`
                                     absolute -top-8 left-1/2 -translate-x-1/2 
-                                    text-[10px] font-bold uppercase tracking-wider 
-                                    bg-black px-2 py-1 rounded text-white 
+                                    text-[9px] font-bold uppercase tracking-widest 
+                                    bg-black/90 px-2 py-1 rounded text-white border border-white/10
                                     opacity-0 group-hover/emoji:opacity-100 
-                                    transition-opacity duration-200 pointer-events-none
-                                    whitespace-nowrap
+                                    transition-all duration-200 pointer-events-none
+                                    whitespace-nowrap transform translate-y-1 group-hover/emoji:translate-y-0
                                 `}>
                                     {r.label}
                                 </span>
-                                {showReactionCounts && (
-                                    <span className="absolute -bottom-2 right-0 bg-white text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-lg border border-black/10 pointer-events-none">
-                                        {count.toLocaleString('fr-FR')}
-                                    </span>
-                                )}
                             </button>
                         );
                     })}
@@ -243,6 +225,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                         onClick={() => setShowReactions(!showReactions)}
                         activeColor={selectedReaction?.glowColor}
                         counter={totalCommunityReactions}
+                        minimal={minimal}
                     >
                         <div className={`transform transition-transform duration-300 ${animateReaction ? 'scale-125' : ''}`}>
                             {selectedReaction ? (
@@ -250,12 +233,11 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                                     {selectedReaction.emoji}
                                 </span>
                             ) : (
-                                <ThumbsUpIcon className="w-6 h-6" />
+                                <ThumbsUpIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                             )}
                         </div>
                     </ActionButton>
                 </div>
-
             </div>
 
             <style>{`

@@ -8,23 +8,24 @@
   0% {
     transform: translateX(-100%);
   }
+
   100% {
     transform: translateX(100%);
   }
 }
 
-.hide-interface-button .eye-icon {
-  width: 1.2rem;
-  height: 1.2rem;
+.eye-icon {
+  width: 1rem;
+  height: 1rem;
   filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.15));
   transform-origin: center;
 }
 
-.hide-interface-button .eye-icon--visible {
+.eye-icon--visible {
   animation: eyePulse 3.5s ease-in-out infinite;
 }
 
-.hide-interface-button .eye-icon--hidden {
+.eye-icon--hidden {
   animation: eyeBlink 2.1s ease-in-out infinite;
 }
 
@@ -33,10 +34,12 @@
     transform: scale(1);
     filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.2));
   }
+
   50% {
     transform: scale(1.1);
     filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.45));
   }
+
   100% {
     transform: scale(1);
     filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.2));
@@ -44,9 +47,13 @@
 }
 
 @keyframes eyeBlink {
-  0%, 85%, 100% {
+
+  0%,
+  85%,
+  100% {
     transform: scaleY(1) scaleX(1);
   }
+
   90% {
     transform: scaleY(0.2) scaleX(1.05);
   }

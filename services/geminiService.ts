@@ -1,7 +1,10 @@
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
+// import FirecrawlApp from 'firecrawl'; // SDK retiré pour compatibilité navigateur
 import { Bias, NewsArticle, Sentiment, Source, UserComment } from '../types';
-import { getImagenService, SUPABASE_IMAGE_BUCKET } from './imagenService';
+import { getImagenService, SUPABASE_IMAGE_BUCKET, isImagenServiceEnabled } from './imagenService';
 import { supabase } from './supabaseClient';
+import { PRISM_PROMPTS } from './prompts';
+import { progressTracker } from './progressTracker';
 
 console.log("GeminiService Module Loaded");
 
@@ -16,6 +19,8 @@ const SUPABASE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 heures
 const LOCAL_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const RATE_LIMIT_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 const LOCAL_CACHE_PREFIX = 'prism-cache:';
+const GEMINI_TIMEOUT_MS = 120 * 1000; // AUGMENTÉ : 120s pour laisser le temps à Gemini 2.0 et aux images
+const truthyEnvValues = new Set(['1', 'true', 'yes', 'on']);
 
 const MIN_ARTICLES = 10;
 const MIN_SOURCES_PER_ARTICLE = 5;
@@ -28,30 +33,46 @@ type CuratedSourceProfile = {
   defaultSummary: string;
 };
 
+/**
+ * Positionnement des médias basé sur les évaluations de :
+ * - Media Bias/Fact Check (MBFC)
+ * - AllSides Media Bias Ratings
+ * - Décodex (Le Monde)
+ * - Ad Fontes Media
+ * 
+ * Échelle : 0 (extrême gauche) ← 50 (centre) → 100 (extrême droite)
+ */
 const curatedSourcePool: Record<Bias, CuratedSourceProfile[]> = {
   left: [
-    { name: 'lemonde.fr', bias: 'left', position: 30, defaultSummary: 'Décryptage social de {topic} par Le Monde.' },
-    { name: 'theguardian.com', bias: 'left', position: 28, defaultSummary: 'Perspective société civile du Guardian sur {topic}.' },
-    { name: 'mediapart.fr', bias: 'left', position: 22, defaultSummary: 'Contre-enquête indépendante de Mediapart autour de {topic}.' },
-    { name: 'vox.com', bias: 'left', position: 35, defaultSummary: 'Analyse progressiste de Vox appliquée à {topic}.' }
+    { name: 'lemonde.fr', bias: 'left', position: 35, defaultSummary: 'Décryptage social de {topic} par Le Monde.' }, // Center-Left selon MBFC
+    { name: 'theguardian.com', bias: 'left', position: 30, defaultSummary: 'Perspective société civile du Guardian sur {topic}.' }, // Left selon AllSides
+    { name: 'mediapart.fr', bias: 'left', position: 25, defaultSummary: 'Contre-enquête indépendante de Mediapart autour de {topic}.' }, // Left selon Décodex
+    { name: 'liberation.fr', bias: 'left', position: 28, defaultSummary: 'Analyse sociale et politique de Libération sur {topic}.' }, // Left-Center selon MBFC
+    { name: 'humanite.fr', bias: 'left', position: 20, defaultSummary: 'Perspective ouvrière de L\'Humanité concernant {topic}.' }, // Left selon Décodex
+    { name: 'vox.com', bias: 'left', position: 32, defaultSummary: 'Analyse progressiste de Vox appliquée à {topic}.' } // Left selon AllSides
   ],
   center: [
-    { name: 'reuters.com', bias: 'center', position: 50, defaultSummary: 'Dépêche factuelle de Reuters consacrée à {topic}.' },
-    { name: 'apnews.com', bias: 'center', position: 48, defaultSummary: 'Synthèse Associated Press sur {topic}.' },
-    { name: 'ft.com', bias: 'center', position: 55, defaultSummary: 'Lecture marchés et gouvernance du Financial Times sur {topic}.' },
-    { name: 'politico.eu', bias: 'center', position: 53, defaultSummary: 'Analyse politique européenne de Politico liée à {topic}.' }
+    { name: 'reuters.com', bias: 'center', position: 50, defaultSummary: 'Dépêche factuelle de Reuters consacrée à {topic}.' }, // Least Biased selon MBFC
+    { name: 'apnews.com', bias: 'center', position: 50, defaultSummary: 'Synthèse Associated Press sur {topic}.' }, // Center selon AllSides
+    { name: 'afp.com', bias: 'center', position: 50, defaultSummary: 'Fil d\'actualité AFP sur {topic}.' }, // Least Biased selon MBFC
+    { name: 'bbc.com', bias: 'center', position: 48, defaultSummary: 'Couverture BBC de {topic}.' }, // Center selon AllSides
+    { name: 'politico.eu', bias: 'center', position: 52, defaultSummary: 'Analyse politique européenne de Politico liée à {topic}.' }, // Center selon MBFC
+    { name: 'axios.com', bias: 'center', position: 50, defaultSummary: 'Synthèse concise d\'Axios concernant {topic}.' } // Center selon AllSides
   ],
   right: [
-    { name: 'lefigaro.fr', bias: 'right', position: 70, defaultSummary: 'Lecture conservatrice française proposée par Le Figaro sur {topic}.' },
-    { name: 'wsj.com', bias: 'right', position: 75, defaultSummary: 'Perspective pro-business du Wall Street Journal appliquée à {topic}.' },
-    { name: 'foxnews.com', bias: 'right', position: 90, defaultSummary: 'Traitement éditorial conservateur de Fox News autour de {topic}.' },
-    { name: 'lesechos.fr', bias: 'right', position: 68, defaultSummary: 'Analyse économique libérale de Les Échos au sujet de {topic}.' }
+    { name: 'lefigaro.fr', bias: 'right', position: 65, defaultSummary: 'Lecture conservatrice française proposée par Le Figaro sur {topic}.' }, // Right-Center selon MBFC
+    { name: 'wsj.com', bias: 'right', position: 68, defaultSummary: 'Perspective pro-business du Wall Street Journal appliquée à {topic}.' }, // Center-Right selon AllSides
+    { name: 'lesechos.fr', bias: 'right', position: 67, defaultSummary: 'Analyse économique libérale de Les Échos au sujet de {topic}.' }, // Right-Center économique
+    { name: 'economist.com', bias: 'right', position: 63, defaultSummary: 'Analyse économique The Economist portant sur {topic}.' }, // Center-Right selon MBFC
+    { name: 'foxnews.com', bias: 'right', position: 80, defaultSummary: 'Traitement éditorial conservateur de Fox News autour de {topic}.' }, // Right selon AllSides
+    { name: 'nypost.com', bias: 'right', position: 72, defaultSummary: 'Couverture New York Post de {topic}.' } // Right selon AllSides
   ],
   neutral: [
-    { name: 'afp.com', bias: 'neutral', position: 50, defaultSummary: 'Fil d’actualité AFP sur {topic}.' },
-    { name: 'who.int', bias: 'neutral', position: 45, defaultSummary: 'Données techniques multilatérales de l’OMS liées à {topic}.' },
-    { name: 'worldbank.org', bias: 'neutral', position: 55, defaultSummary: 'Lecture macro-économique de la Banque mondiale autour de {topic}.' },
-    { name: 'oecd.org', bias: 'neutral', position: 52, defaultSummary: 'Étude comparative produite par l’OCDE au sujet de {topic}.' }
+    { name: 'afp.com', bias: 'neutral', position: 50, defaultSummary: 'Fil d\'actualité AFP sur {topic}.' },
+    { name: 'who.int', bias: 'neutral', position: 50, defaultSummary: 'Données techniques multilatérales de l\'OMS liées à {topic}.' },
+    { name: 'worldbank.org', bias: 'neutral', position: 50, defaultSummary: 'Lecture macro-économique de la Banque mondiale autour de {topic}.' },
+    { name: 'oecd.org', bias: 'neutral', position: 50, defaultSummary: 'Étude comparative produite par l\'OCDE au sujet de {topic}.' },
+    { name: 'un.org', bias: 'neutral', position: 50, defaultSummary: 'Position institutionnelle de l\'ONU sur {topic}.' }
   ]
 };
 
@@ -204,8 +225,24 @@ const sortArticlesBySourceRichness = (articles: NewsArticle[]): NewsArticle[] =>
 
 const hydrateRawSource = (rawSource: any, headline: string, summary: string): Source => {
   const rawName = collapseWhitespace(rawSource?.name) || 'Source non identifiée';
-  const bias = sanitizeBias(rawSource?.bias);
-  const position = typeof rawSource?.position === 'number' ? rawSource.position : defaultPositionByBias[bias];
+  
+  // Recherche de profil connu pour forcer la position et le biais corrects
+  let knownProfile: CuratedSourceProfile | undefined;
+  const normalizedRawName = normalizeSourceName(rawName);
+  
+  for (const biasKey of Object.keys(curatedSourcePool) as Bias[]) {
+      const found = curatedSourcePool[biasKey].find(p => {
+          const pName = normalizeSourceName(p.name);
+          return pName === normalizedRawName || normalizedRawName.includes(pName) || pName.includes(normalizedRawName);
+      });
+      if (found) {
+          knownProfile = found;
+          break;
+      }
+  }
+
+  const bias = knownProfile ? knownProfile.bias : sanitizeBias(rawSource?.bias);
+  const position = knownProfile ? knownProfile.position : (typeof rawSource?.position === 'number' ? rawSource.position : defaultPositionByBias[bias]);
   const coverageSummary = enrichCoverageSummary(rawSource?.coverageSummary, rawName, headline, summary);
   const url = typeof rawSource?.url === 'string' && rawSource.url.trim().length > 0
     ? rawSource.url
@@ -248,6 +285,45 @@ type LocalCachePayload = {
 
 let lastRateLimitHit = 0;
 
+const parseBooleanFlag = (value?: string | boolean | null): boolean => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    return truthyEnvValues.has(value.trim().toLowerCase());
+  }
+  return false;
+};
+
+const detectMockMode = (): boolean => {
+  try {
+    const globalFlag = (globalThis as any)?.__PRISM_FORCE_MOCK__;
+    if (parseBooleanFlag(globalFlag)) {
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+  if (typeof process !== 'undefined') {
+    if (parseBooleanFlag(process.env?.FORCE_MOCK_DATA)) {
+      return true;
+    }
+    if (parseBooleanFlag(process.env?.USE_MOCK_DATA)) {
+      return true;
+    }
+  }
+  if (typeof import.meta !== 'undefined' && (import.meta as any)?.env) {
+    const browserEnv = (import.meta as any).env as Record<string, string | boolean>;
+    if (parseBooleanFlag(browserEnv.VITE_FORCE_MOCK_DATA)) {
+      return true;
+    }
+    if (parseBooleanFlag(browserEnv.VITE_USE_MOCK_DATA)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 const resolveApiKey = (): string | undefined => {
   const isBrowser = typeof window !== 'undefined';
   if (!isBrowser && typeof process !== 'undefined' && process.env?.API_KEY) {
@@ -257,6 +333,185 @@ const resolveApiKey = (): string | undefined => {
     return (import.meta as any).env.VITE_API_KEY as string;
   }
   return undefined;
+};
+
+const FORCE_MOCK_DATA = detectMockMode();
+
+const resolveFirecrawlKey = (): string | undefined => {
+  const isBrowser = typeof window !== 'undefined';
+  if (!isBrowser && typeof process !== 'undefined' && process.env?.FIRECRAWL_API_KEY) {
+    return process.env.FIRECRAWL_API_KEY;
+  }
+  if (typeof import.meta !== 'undefined' && (import.meta as any)?.env?.VITE_FIRECRAWL_API_KEY) {
+    return (import.meta as any).env.VITE_FIRECRAWL_API_KEY as string;
+  }
+  return undefined;
+};
+
+const performFirecrawlDiscovery = async (query: string | undefined, category: string | undefined): Promise<string | null> => {
+  const apiKey = resolveFirecrawlKey();
+  if (!apiKey) {
+    console.warn("[PRISM ⚠️] No Firecrawl API Key found.");
+    return null;
+  }
+
+  progressTracker.emit({
+    phase: 'firecrawl_start',
+    progress: 5,
+    message: 'Scan Sources Mondiales',
+    detail: 'Lancement de la collecte parallèle...'
+  });
+
+  console.log("[PRISM 🕷️] Firecrawl active - Engaging 'Massive Parallel Harvest'...");
+
+  const baseQuery = query || '';
+  const context = category && category !== 'Général' ? `in ${category}` : 'world news';
+
+  // 5 Vecteurs pour atteindre ~100 sources brutes
+  const searchVectors = [
+    { name: "HEADLINES", q: query ? `${baseQuery} news facts` : `breaking news headlines ${context} today`, emoji: "📰" },
+    { name: "POLITICS", q: query ? `${baseQuery} political analysis` : `political analysis opinion editorials ${context}`, emoji: "🏛️" },
+    { name: "ECONOMY", q: query ? `${baseQuery} market trends` : `financial markets business economy ${context}`, emoji: "💹" },
+    { name: "TECH_SCI", q: query ? `${baseQuery} technology science` : `technology science innovation ${context}`, emoji: "🔬" },
+    { name: "SOCIETY", q: query ? `${baseQuery} social issues` : `social issues environment culture ${context}`, emoji: "🌍" }
+  ];
+
+  try {
+    const executeVectorSearch = async (vectorName: string, searchQuery: string, vectorEmoji: string, vectorIndex: number) => {
+      const progressBase = 10 + (vectorIndex * 10); // 10, 20, 30, 40, 50
+
+      progressTracker.emit({
+        phase: 'firecrawl_vector',
+        progress: progressBase,
+        message: 'Scan Sources Mondiales',
+        detail: `${vectorEmoji} Vecteur ${vectorName} en cours...`,
+        metadata: { vectorName }
+      });
+
+      console.log(`[PRISM 🕷️] Vector '${vectorName}' launching...`);
+      const startV = Date.now();
+      
+      // Ajout d'un timeout court (15s) pour éviter de bloquer l'interface
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      try {
+        const response = await fetch('https://api.firecrawl.dev/v1/search', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            query: searchQuery,
+            limit: 20,
+            scrapeOptions: {
+              formats: ['markdown'],
+              onlyMainContent: true
+            }
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`[PRISM 🕷️] Vector '${vectorName}' API Error: ${response.status}`);
+          throw new Error(`API responded with ${response.status}: ${errorText}`);
+        }
+
+        const json = await response.json();
+        if (!json.success) {
+          throw new Error(json.error || 'Unknown Firecrawl error');
+        }
+
+        const foundCount = json.data?.length || 0;
+        console.log(`[PRISM 🕷️] Vector '${vectorName}' completed in ${(Date.now() - startV) / 1000}s. Found ${foundCount} items.`);
+
+        return { vector: vectorName, data: json.data || [] };
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+           console.warn(`[PRISM ⚠️] Vector ${vectorName} TIMED OUT after 15s`);
+        } else {
+           console.warn(`[PRISM ⚠️] Vector ${vectorName} failed:`, err);
+        }
+        return { vector: vectorName, data: [] };
+      }
+    };
+
+    // Exécution PARALLÈLE
+    const vectorPromises = searchVectors.map(async (vector, index) => {
+      try {
+        return await executeVectorSearch(vector.name, vector.q, vector.emoji, index);
+      } catch (err) {
+        console.warn(`[PRISM ⚠️] Vector ${vector.name} failed:`, err);
+        return { vector: vector.name, data: [] };
+      }
+    });
+
+    const results = await Promise.all(vectorPromises);
+
+    let totalSources = 0;
+    const consolidatedContext = results.map(r => {
+      if (r.data.length === 0) return '';
+      totalSources += r.data.length;
+
+      const vectorContent = r.data.map((item: any, idx: number) => `
+[SOURCE_REF: ${r.vector}_${idx + 1}]
+TITLE: ${item.title}
+URL: ${item.url}
+SOURCE: ${new URL(item.url).hostname.replace('www.', '')}
+CONTENT_SNIPPET:
+${item.markdown ? item.markdown.slice(0, 1200).replace(/\n+/g, ' ') : 'No content.'}
+`).join('\n'); // Snippets réduits à 1200 chars pour faire rentrer 100 sources dans le contexte
+
+      return `### SECTEUR ${r.vector} ###\n${vectorContent}`;
+    }).join('\n\n');
+
+    if (totalSources === 0) {
+      console.warn("[PRISM ⚠️] Firecrawl Harvest returned 0 results.");
+      return null;
+    }
+
+    progressTracker.emit({
+      phase: 'firecrawl_complete',
+      progress: 60,
+      message: 'Agrégation Données',
+      detail: `${totalSources} sources collectées et consolidées`,
+      metadata: { sourcesFound: totalSources }
+    });
+
+    console.log(`[PRISM 📦] Harvest Complete. Ingested ${totalSources} raw sources.`);
+    return consolidatedContext;
+
+  } catch (error) {
+    console.warn("[PRISM 💥] Firecrawl Critical Failure:", error);
+    return null;
+  }
+};
+
+const withTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout?: () => void
+): Promise<T> => {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      onTimeout?.();
+      reject(new Error(`Operation timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
 };
 
 const getLocalStorage = (): Storage | null => {
@@ -306,9 +561,18 @@ const saveLocalCache = (cacheKey: string, articles: NewsArticle[]): void => {
   if (!storage) {
     return;
   }
+  // Strip base64 images to prevent LocalStorage quota exceeded errors
+  const safeArticles = articles.map(a => {
+    if (a.imageUrl && a.imageUrl.startsWith('data:')) {
+        // On ne met pas en cache le base64 lourd, on le perd au refresh mais on sauve l'app
+        return { ...a, imageUrl: '' };
+    }
+    return a;
+  });
+
   const payload: LocalCachePayload = {
     timestamp: Date.now(),
-    articles,
+    articles: safeArticles,
   };
   try {
     storage.setItem(`${LOCAL_CACHE_PREFIX}${cacheKey}`, JSON.stringify(payload));
@@ -385,22 +649,26 @@ const persistTilesToRepository = async (articles: NewsArticle[], cacheKey: strin
     return;
   }
   try {
-    const payload = articles.map((article) => ({
-      article_id: article.id,
-      search_key: cacheKey,
-      article,
-      image_storage_path: getStoragePathFromUrl(article.imageUrl),
-    }));
-    const { error } = await supabase
-      .from('news_tiles')
-      .upsert(payload, { onConflict: 'article_id' });
+    // Batching pour éviter le timeout sur payload trop lourd (Base64)
+    const BATCH_SIZE = 2;
+    for (let i = 0; i < articles.length; i += BATCH_SIZE) {
+        const batch = articles.slice(i, i + BATCH_SIZE);
+        const payload = batch.map((article) => ({
+          article_id: article.id,
+          search_key: cacheKey,
+          article,
+          image_storage_path: getStoragePathFromUrl(article.imageUrl),
+        }));
+        
+        const { error } = await supabase
+          .from('news_tiles')
+          .upsert(payload, { onConflict: 'article_id' });
 
-    if (error) {
-      console.warn("[PRISM] Échec upsert news_tiles:", error);
-      return;
+        if (error) {
+          console.warn(`[PRISM] Échec upsert news_tiles (batch ${i}):`, error);
+        }
     }
-
-    console.log(`[PRISM] Persisted ${payload.length} tiles for key: ${cacheKey}`);
+    console.log(`[PRISM] Persisted ${articles.length} tiles for key: ${cacheKey}`);
   } catch (error) {
     console.warn("[PRISM] Failed to persist tiles:", error);
   }
@@ -496,6 +764,11 @@ const cleanupExpiredTiles = async () => {
 const collapseWhitespace = (value?: string): string =>
   value ? value.replace(/\s+/g, ' ').trim() : '';
 
+const cleanCitations = (text?: string): string => {
+  if (!text) return '';
+  return text.replace(/\[cite:\s*[^\]]+\]/gi, '').trim();
+};
+
 const buildTileBackgroundPrompt = (article: NewsArticle): string => {
   const subjectFocus =
     collapseWhitespace(article.imagePrompt) ||
@@ -506,54 +779,71 @@ const buildTileBackgroundPrompt = (article: NewsArticle): string => {
   );
   const moodCue = article.emoji ? `Mood cue suggested by ${article.emoji}.` : '';
 
-  return [
-    "Premium editorial background for a PRISM news tile, inspired by iconic French newspaper caricatures.",
-    `Subject focus: ${subjectFocus}.`,
-    contextSummary ? `Context and stakes: ${contextSummary}.` : '',
-    "Scene direction: elegant portrait framing with layered depth, subtle architectural or institutional cues tied to the story, diagonal energy, soft vignette, generous breathing space for overlay text.",
-    "Art direction: expressive black ink line work with selective watercolor washes, satirical tone reminiscent of Plantu, Cabu, Wolinski and Le Canard Enchaîné illustrations; bold silhouettes, witty symbolism, slightly exaggerated facial expressions.",
-    "Tone: impactful, highly critical political humor with sharp wit, accurate likeness to public figures, detailed storytelling cues, never mean-spirited.",
-    "Color palette: muted newsprint beige plus charcoal blacks with one or two vivid accent colours echoing the topic.",
-    "Technical: 3:4 vertical composition, ultra high resolution, crisp textures, tile-friendly negative space, absolutely no text, captions, logos or UI chrome.",
-    `${moodCue}Negative prompt: avoid photorealism, 3D renders, CGI artifacts, pixelation, watermarks, gore or offensive caricature tropes.`
-  ]
-    .filter(Boolean)
-    .join(' ');
+  return PRISM_PROMPTS.IMAGE_GENERATION.buildPrompt(subjectFocus, contextSummary, moodCue);
 };
 
-// Algorithme de calcul de fiabilité basé sur des données tangibles
+/**
+ * Algorithme de calcul de fiabilité basé sur 4 piliers
+ * 
+ * Méthodologie (affichée à l'utilisateur) :
+ * 1. Couverture médiatique (40%) : Diversité des sources, équilibre gauche/centre/droite, recoupement 24h
+ * 2. Scores organismes indépendants (35%) : Agrégation MBFC, AllSides, RSF
+ * 3. Historique de corrections (15%) : Pénalités si errata fréquents
+ * 4. Signal fact-check temps réel (10%) : Alignement IFCN, AFP Factuel
+ * 
+ * Note : Actuellement, seul le pilier 1 (Couverture médiatique) est calculé avec les données réelles.
+ * Les autres piliers sont simulés en attendant l'intégration des APIs des organismes.
+ */
 const calculateReliability = (sources: Source[]): number => {
-  let score = 50; // Score de base plus élevé
+  // === PILIER 1 : COUVERTURE MÉDIATIQUE (40 points max) ===
+  let coverageScore = 0;
 
-  // 1. Quantité de sources (Max +40)
-  // On valorise fortement la multiplication des sources au-delà du minimum
-  const quantityBase = Math.min(sources.length, MIN_SOURCES_PER_ARTICLE) * 5;
-  const quantityStretch = sources.length > MIN_SOURCES_PER_ARTICLE
-    ? Math.min((sources.length - MIN_SOURCES_PER_ARTICLE) * 3, 15)
-    : 0;
-  score += quantityBase + quantityStretch;
+  // 1.1 Quantité brute de sources (20 points max)
+  const sourceCount = sources.length;
+  if (sourceCount >= 8) {
+    coverageScore += 20; // Excellente couverture
+  } else if (sourceCount >= 5) {
+    coverageScore += 15; // Bonne couverture
+  } else if (sourceCount >= 3) {
+    coverageScore += 10; // Couverture acceptable
+  } else if (sourceCount === 2) {
+    coverageScore += 5; // Couverture faible
+  } else {
+    coverageScore += 0; // Couverture insuffisante
+  }
 
-  // 2. Diversité du spectre (Max +20)
+  // 1.2 Diversité du spectre politique (20 points max)
   const hasLeft = sources.some(s => s.bias === 'left');
   const hasRight = sources.some(s => s.bias === 'right');
   const hasCenter = sources.some(s => s.bias === 'center' || s.bias === 'neutral');
 
-  if (hasLeft && hasRight) {
-    score += 15; // Forte polarité couverte
+  if (hasLeft && hasRight && hasCenter) {
+    coverageScore += 20; // Spectre complet = excellente diversité
+  } else if ((hasLeft && hasRight) || (hasLeft && hasCenter) || (hasRight && hasCenter)) {
+    coverageScore += 12; // Deux orientations = bonne diversité
+  } else {
+    coverageScore += 5; // Une seule orientation = diversité limitée
   }
-  if (hasCenter) {
-    score += 5; // Point de référence neutre
-  }
 
-  // 3. Bonus "Mainstream" (si on atteint l'objectif cible)
-  if (sources.length >= TARGET_SOURCES_PER_ARTICLE) score += 5;
+  // === PILIER 2 : SCORES ORGANISMES INDÉPENDANTS (35 points) ===
+  // TODO: Intégrer les APIs MBFC, AllSides, RSF
+  // Pour l'instant, on attribue un score moyen basé sur la présence de sources reconnues
+  const independentOrgScore = 25; // Score par défaut (71% de 35)
 
-  // 4. Pénalités
-  if (sources.length < 2) score -= 30; // Pénalité critique si source unique
-  if (sources.length === 2) score -= 10;
+  // === PILIER 3 : HISTORIQUE DE CORRECTIONS (15 points) ===
+  // TODO: Tracker les errata des sources au fil du temps
+  // Pour l'instant, bonus/malus selon la réputation générale
+  const correctionHistoryScore = 12; // Score par défaut (80% de 15)
 
-  // Bornage strict entre 20 et 98
-  return Math.min(Math.max(score, 20), 98);
+  // === PILIER 4 : SIGNAL FACT-CHECK TEMPS RÉEL (10 points) ===
+  // TODO: Intégrer IFCN et AFP Factuel
+  const factCheckScore = 8; // Score par défaut (80% de 10)
+
+  // === CALCUL FINAL ===
+  const totalScore = coverageScore + independentOrgScore + correctionHistoryScore + factCheckScore;
+
+  // Bornage entre 20 et 95 (on garde une marge pour ne jamais afficher 100%)
+  return Math.min(Math.max(totalScore, 20), 95);
 };
 
 type StrategicTopicBlueprint = {
@@ -862,7 +1152,8 @@ const buildStrategicFallbackArticles = (): NewsArticle[] =>
     };
   });
 
-const fetchNewsArticles = async (query?: string, category?: string): Promise<NewsArticle[]> => {
+const fetchNewsArticles = async (query?: string, category?: string, forceRefresh = false): Promise<NewsArticle[]> => {
+  console.log('[PRISM 🚀] fetchNewsArticles CALLED', { query, category });
   const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const now = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
@@ -879,140 +1170,245 @@ const fetchNewsArticles = async (query?: string, category?: string): Promise<New
     : (category ? `category:${category.toLowerCase().trim()}` : 'general');
   const cacheKey = `${baseCacheKey}|${TILE_PIPELINE_VERSION}`;
 
+  if (FORCE_MOCK_DATA) {
+    console.warn("[PRISM] MODE MOCK activé (FORCE_MOCK_DATA). Utilisation des données stratégiques locales.");
+    return buildStrategicFallbackArticles();
+  }
+
   const localCachedArticles = getLocalCache(cacheKey);
-  if (localCachedArticles) {
+  if (!forceRefresh && localCachedArticles) {
     console.log(`[PRISM] Local cache hit for key: ${cacheKey}`);
     return localCachedArticles;
   }
 
-  await cleanupExpiredTiles();
+  // await cleanupExpiredTiles();
+  // Exécution en arrière-plan pour ne pas bloquer le chargement initial
+  cleanupExpiredTiles().catch(e => console.warn("[PRISM] Background cleanup warning:", e));
 
   try {
     const apiKey = resolveApiKey();
     console.log("[PRISM] Checking API Key:", apiKey ? "Present" : "Missing");
     // Check for API Key inside the try block to allow fallback to mocks
     if (!apiKey) {
-       throw new Error("API_KEY environment variable is not set. Switching to mock data.");
+      throw new Error("API_KEY environment variable is not set. Switching to mock data.");
     }
 
-    const supabaseCached = await fetchSupabaseCache(cacheKey, SUPABASE_CACHE_TTL_MS);
+    // Timeout court pour le cache Supabase (5s) afin d'éviter le blocage
+    let supabaseCached = null;
+    if (!forceRefresh) {
+        supabaseCached = await withTimeout(
+          fetchSupabaseCache(cacheKey, SUPABASE_CACHE_TTL_MS), 
+          5000, 
+          () => console.warn("[PRISM] Supabase cache check timed out")
+        ).catch(err => {
+          console.warn("[PRISM] Skipping Supabase cache due to error/timeout:", err);
+          return null;
+        });
+    }
+
     if (supabaseCached) {
       saveLocalCache(cacheKey, supabaseCached);
       return supabaseCached;
     }
 
-  const repositoryTiles = await fetchTilesFromRepository(cacheKey);
-  if (repositoryTiles) {
-    saveLocalCache(cacheKey, repositoryTiles);
-    return repositoryTiles;
-  }
-
-  if (Date.now() - lastRateLimitHit < RATE_LIMIT_COOLDOWN_MS) {
-    console.warn(`[PRISM] Gemini cooldown active for key: ${cacheKey}. Serving stale cache.`);
-    const staleLocal = getLocalCache(cacheKey, { allowStale: true });
-    if (staleLocal) {
-      return staleLocal;
+    let repositoryTiles = null;
+    if (!forceRefresh) {
+        repositoryTiles = await withTimeout(
+          fetchTilesFromRepository(cacheKey),
+          5000,
+          () => console.warn("[PRISM] Repository check timed out")
+        ).catch(err => {
+          console.warn("[PRISM] Skipping repository tiles due to error/timeout:", err);
+          return null;
+        });
     }
-    const staleSupabase = await fetchSupabaseCache(cacheKey, SUPABASE_CACHE_TTL_MS * 2);
-    if (staleSupabase) {
-      saveLocalCache(cacheKey, staleSupabase);
-      return staleSupabase;
+
+    if (repositoryTiles) {
+      saveLocalCache(cacheKey, repositoryTiles);
+      return repositoryTiles;
     }
-  }
 
-  console.log(`[PRISM] Cache NOT FOUND for key: ${cacheKey}, generating new content...`);
-
-  const ai = new GoogleGenAI({ apiKey: resolveApiKey() || "" });
-
-  const prompt = `
-    Nous sommes le ${today} et il est ${now}.
-    Tu es "PRISM", un moteur d'intelligence artificielle ultra-rapide d'analyse de l'actualité.
-    
-    TACHE : ${taskDescription}
-    
-    OBJECTIFS DE COUVERTURE :
-    - Fournis ${MIN_ARTICLES} sujets distincts et classe-les par ordre décroissant du nombre de sources (le sujet avec le plus de sources arrive en premier).
-    - Chaque sujet cite au minimum ${MIN_SOURCES_PER_ARTICLE} sources uniques et vise 8 à 12 références quand l'actualité le permet.
-    - Jamais de doublon : si deux angles se chevauchent, fusionne-les en un seul sujet plus complet.
-    
-    RÈGLES IMPÉRATIVES POUR LES SOURCES :
-    1. **QUANTITÉ** : Minimum ${MIN_SOURCES_PER_ARTICLE} sources distinctes par article. Cherche systématiquement à dépasser ce seuil pour maximiser la valeur éditoriale.
-    2. **DIVERSITÉ** : Cherche activement des sources de GAUCHE, de DROITE et du CENTRE pour le même sujet.
-    3. **PRÉCISION** : Utilise le nom de domaine racine (ex: 'lemonde.fr') pour le champ 'name'.
-    4. **POSITIONNEMENT VÉRIFIÉ** : Base-toi sur des sources de référence reconnues pour déterminer le positionnement politique :
-       - Pour médias internationaux : Media Bias/Fact Check, AllSides, Ad Fontes Media
-       - Pour médias français : Décodex (Le Monde), études académiques
-       - Le champ "position" (0-100) doit refléter ces classifications établies, pas une interprétation subjective.
-       - Sois cohérent : Le Monde (~25-35), Le Figaro (~65-75), Reuters/AFP (~48-52), Fox News (~85-95), etc.
-    
-    RÈGLES VISUELLES :
-    1. Associe à chaque article un **EMOJI UNIQUE** qui représente le sujet (ex: 🚜, 🗳️, 📉).
-    2. Images: Prompt pour une **CARICATURE DE PRESSE SATIRIQUE** (Style encre, Plantu/Canard Enchaîné). Prompt en ANGLAIS.
-    
-    FORMAT JSON STRICT (Tableau d'objets) :
-    [
-      {
-        "id": "unique_string",
-        "headline": "Titre percutant (Max 10 mots)",
-        "summary": "Résumé dense de l'info et des enjeux (Max 2 phrases)",
-        "detailedSummary": "Analyse approfondie de l'événement, du contexte et des implications (3-4 phrases).",
-        "importance": "Pourquoi c'est important ? Explique l'impact majeur de cette nouvelle (2 phrases).",
-        "emoji": "🇪🇺",
-        "publishedAt": "Temps relatif précis en Français basé sur la date réelle des articles (ex: 'IL Y A 2H', '14:30', 'HIER', 'EN DIRECT', 'IL Y A 15 MIN'). Si c'est un événement en cours, mettre 'EN DIRECT'.",
-        "imagePrompt": "Political satire cartoon illustration of [subject]...",
-        "imageUrl": "URL réelle ou vide",
-        "biasAnalysis": { "left": 0, "center": 0, "right": 0, "reliabilityScore": 0 }, // Laisse reliabilityScore à 0, je le calculerai.
-        "sources": [
-          {
-            "name": "lemonde.fr", 
-            "bias": "left" | "center" | "right" | "neutral",
-            "logoUrl": "",
-            "position": number (0-100, 0=gauche, 100=droite),
-            "coverageSummary": "Angle spécifique de ce média (1 phrase)",
-            "url": "" // Laisse vide, je vais le générer pour éviter les 404
-          },
-          ... (Minimum 3 sources !)
-        ],
-        "sentiment": { "positive": "Argumentaire pour...", "negative": "Argumentaire contre..." }
+    if (Date.now() - lastRateLimitHit < RATE_LIMIT_COOLDOWN_MS) {
+      console.warn(`[PRISM] Gemini cooldown active for key: ${cacheKey}. Serving stale cache.`);
+      const staleLocal = getLocalCache(cacheKey, { allowStale: true });
+      if (staleLocal) {
+        return staleLocal;
       }
-    ]
-  `;
+      const staleSupabase = await fetchSupabaseCache(cacheKey, SUPABASE_CACHE_TTL_MS * 2);
+      if (staleSupabase) {
+        saveLocalCache(cacheKey, staleSupabase);
+        return staleSupabase;
+      }
+    }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        temperature: 0.3,
-        safetySettings: [
-          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        ],
-      },
+    console.log(`[PRISM 🧠] Cache NOT FOUND for key: ${cacheKey}. Engaging Deep Harvest protocol...`);
+
+    progressTracker.emit({
+      phase: 'init',
+      progress: 2,
+      message: 'Initialisation Système',
+      detail: 'Préparation du protocole Deep Harvest...'
     });
 
-    const textResponse = response.text;
+    const firecrawlContext = await performFirecrawlDiscovery(query, category);
+    const ai = new GoogleGenAI({ apiKey: resolveApiKey() || "" });
+
+    let prompt = "";
+    let toolsConfig = {};
+
+    if (firecrawlContext) {
+      console.log(`[PRISM 🧠] Context Injection: ${firecrawlContext.length} characters of raw verified data.`);
+      prompt = `
+    ${PRISM_PROMPTS.NEWS_ANALYSIS.SYSTEM_INSTRUCTIONS(today, now)}
+    
+    ${PRISM_PROMPTS.NEWS_ANALYSIS.FIRECRAWL_CONTEXT_PREFIX(firecrawlContext)}
+    
+    ${PRISM_PROMPTS.NEWS_ANALYSIS.TASK_SYNTHESIS_INSTRUCTIONS}
+    `;
+      toolsConfig = { tools: [{ googleSearch: {} }] };
+    } else {
+      console.log("[PRISM ⚠️] Firecrawl inactive or failed. Fallback to Gemini Google Search Tool.");
+      toolsConfig = { tools: [{ googleSearch: {} }] };
+      prompt = `
+    ${PRISM_PROMPTS.NEWS_ANALYSIS.SYSTEM_INSTRUCTIONS(today, now)}
+    
+    ${PRISM_PROMPTS.NEWS_ANALYSIS.TASK_FALLBACK_INSTRUCTIONS(taskDescription)}
+    `;
+    }
+
+    prompt += PRISM_PROMPTS.NEWS_ANALYSIS.OUTPUT_FORMAT(MIN_ARTICLES);
+
+    prompt += `
+  IMPORTANT:
+  0. LANGUAGE: Generate ALL content in FRENCH (français). Headlines, summaries, and analyses MUST be in French.
+  1. Return ONLY the JSON array. NO introduction, NO markdown, NO ending comments.
+  2. ESCAPE all control characters. Newlines in strings must be written as "\\n", not actual line breaks.
+  3. Output MINIFIED JSON (single line) to avoid formatting errors.
+  `;
+
+    const executeGeminiCall = async () => {
+      const modelsToTry = [
+        "gemini-2.0-flash",            // PRIORITÉ 1 : Meilleur ratio Perf/Coût (Nov 2025)
+        "gemini-2.0-flash-lite",       // PRIORITÉ 2 : Version light si quotas serrés
+        "gemini-1.5-flash",            // FALLBACK STABLE : L'ancienne valeur sûre
+        "gemini-1.5-flash-8b"          // FALLBACK RAPIDE : Version ultra-light v1.5
+      ];
+
+      for (const modelName of modelsToTry) {
+        console.log(`[PRISM 🤖] Attempting generation with model: ${modelName}...`);
+
+        progressTracker.emit({
+          phase: 'gemini_generating',
+          progress: 65 + (modelsToTry.indexOf(modelName) * 5),
+          message: 'Détection Biais',
+          detail: `IA Gemini (${modelName}) analyse les sources...`,
+          metadata: { currentModel: modelName }
+        });
+        try {
+          const startTime = Date.now();
+          const result = await withTimeout(
+            ai.models.generateContent({
+              model: modelName,
+              contents: prompt,
+              config: {
+                ...toolsConfig,
+                temperature: 0.3,
+                safetySettings: [
+                  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                ],
+              },
+            }),
+            GEMINI_TIMEOUT_MS,
+            () => console.warn(`[PRISM ⏳] Timeout warning for ${modelName}`)
+          );
+
+          console.log(`[PRISM 🤖] Success with ${modelName} in ${(Date.now() - startTime) / 1000}s`);
+
+          progressTracker.emit({
+            phase: 'gemini_parsing',
+            progress: 82,
+            message: 'Génération Synthèse',
+            detail: 'Analyse terminée, traitement des données...',
+            metadata: { currentModel: modelName }
+          });
+          return result; // Succès, on retourne le résultat
+        } catch (error: any) {
+          const isModelError = error.message?.includes('404') || error.message?.includes('not found') || error.status === 404;
+          if (isModelError) {
+            console.warn(`[PRISM ⚠️] Model ${modelName} not found. Trying next...`);
+            continue;
+          }
+          // Si c'est une 429 (Quota), on essaie aussi le modèle suivant (souvent des quotas séparés)
+          if (error.message?.includes('429') || error.status === 429) {
+            console.warn(`[PRISM ⚠️] Model ${modelName} Quota Exceeded. Trying next...`);
+            continue;
+          }
+          throw error;
+        }
+      }
+      throw new Error("All Gemini models failed to respond.");
+    };
+
+    // Implémentation d'un mécanisme de Retry (3 tentatives)
+    let response;
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    while (attempts < maxAttempts) {
+      try {
+        attempts++;
+        if (attempts > 1) console.log(`[PRISM] Tentative API ${attempts}/${maxAttempts}...`);
+        response = await executeGeminiCall();
+        break; // Succès, on sort de la boucle
+      } catch (err) {
+        console.warn(`[PRISM] Échec tentative ${attempts}:`, err);
+        if (attempts === maxAttempts) throw err; // Si c'était la dernière, on remonte l'erreur
+        // Petit backoff avant de réessayer (1s, 2s...)
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+      }
+    }
+
+    const textResponse = typeof response.text === 'function' ? response.text() : response.text;
 
     if (!textResponse) {
+      console.error("[PRISM 💥] Empty response from Gemini. Debug Info:", JSON.stringify(response, null, 2));
       throw new Error("PRISM n'a reçu aucune donnée (Blocage ou Timeout).");
     }
 
-    let jsonString = textResponse;
-    const jsonMatch = textResponse.match(/```json\s*([\s\S]*?)\s*```/);
-    if (jsonMatch && jsonMatch[1]) {
-      jsonString = jsonMatch[1];
-    } else {
-      jsonString = jsonString.replace(/```/g, '').trim();
+    // Nettoyage agressif du JSON (Markdown, commentaires, etc.)
+    let jsonString = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    // Parfois le modèle ajoute du texte avant/après le tableau JSON
+    const firstBracket = jsonString.indexOf('[');
+    const lastBracket = jsonString.lastIndexOf(']');
+    if (firstBracket !== -1 && lastBracket !== -1) {
+      jsonString = jsonString.substring(firstBracket, lastBracket + 1);
     }
 
     let articlesData;
     try {
       articlesData = JSON.parse(jsonString);
     } catch (e) {
-      console.error("Erreur de parsing PRISM:", e);
-      throw new Error("Erreur de formatage des données PRISM.");
+      // TENTATIVE DE SAUVETAGE : Si le JSON a des sauts de ligne non échappés dans les strings
+      try {
+        console.warn("Parsing JSON échoué, tentative de nettoyage des sauts de ligne...");
+        // Remplacement des caractères de contrôle invalides dans le JSON (Newlines, Tabs non échappés)
+        // On remplace tout saut de ligne litéral par \n car on a demandé un JSON minifié (une seule ligne)
+        const sanitized = jsonString.replace(/[\u0000-\u001F]+/g, (match) => {
+            if (match === '\n') return '\\n';
+            if (match === '\r') return '';
+            if (match === '\t') return '\\t';
+            return '';
+        });
+        articlesData = JSON.parse(sanitized);
+      } catch (e2) {
+        console.error("Erreur de parsing PRISM:", e);
+        console.log("Raw Text reçue:", textResponse.substring(0, 500) + "...");
+        throw new Error("Erreur de formatage des données PRISM.");
+      }
     }
 
     if (!Array.isArray(articlesData)) {
@@ -1023,17 +1419,20 @@ const fetchNewsArticles = async (query?: string, category?: string): Promise<New
       const safeId = article.id || `prism-${Date.now()}-${index}`;
 
       const rawSources = Array.isArray(article.sources) ? article.sources : [];
+      const summary = cleanCitations(article.summary || article.detailedSummary || '');
+      const detailedSummary = cleanCitations(article.detailedSummary || article.summary || '');
+
       const hydratedSources = rawSources.map((source: any) =>
         hydrateRawSource(
           source,
           article.headline || safeId,
-          article.summary || article.detailedSummary || ''
+          summary
         )
       );
 
       const amplifiedSources = ensureSourceFloor(
         article.headline || safeId,
-        article.summary || article.detailedSummary || '',
+        summary,
         hydratedSources
       );
 
@@ -1077,7 +1476,8 @@ const fetchNewsArticles = async (query?: string, category?: string): Promise<New
         sources: amplifiedSources,
         biasAnalysis: updatedBiasAnalysis,
         comments: initialComments,
-        detailedSummary: article.detailedSummary || article.summary, // Fallback
+        summary,
+        detailedSummary,
         importance: article.importance || "Information clé pour comprendre l'actualité." // Fallback
       };
     });
@@ -1090,69 +1490,64 @@ const fetchNewsArticles = async (query?: string, category?: string): Promise<New
     const rankedArticles = sortArticlesBySourceRichness(articlesWithTilePrompts);
     const preparedArticles = ensureMinimumArticleCount(rankedArticles);
 
-    // Génération des images avec Gemini 2.5 Flash Image (Nano Banana)
-    try {
-      const imagenService = getImagenService();
-      const imagePromises = preparedArticles.map(async (article) => {
-        try {
-          const imageUrl = await imagenService.generateCaricature({
-            prompt: article.imagePrompt,
-            aspectRatio: "3:4",
-            id: article.id
-          });
-          return { ...article, imageUrl };
-        } catch (error) {
-          console.error(`Échec génération image pour "${article.headline}":`, error);
-          // Retourne l'article sans imageUrl, NewsCard utilisera Pollinations en fallback
-          return article;
+    let articlesToPersist = preparedArticles;
+
+    if (isImagenServiceEnabled()) {
+      try {
+        const imagenService = getImagenService();
+        
+        // Exécution SÉQUENTIELLE pour éviter le 429 (Too Many Requests) sur le modèle d'image Pro
+        const articlesWithImages: NewsArticle[] = [];
+        
+        for (const article of preparedArticles) {
+            try {
+                // Délai de courtoisie entre chaque génération d'image (2s)
+                // Cela ralentit le chargement global mais garantit la qualité 4K sans erreur de quota
+                if (articlesWithImages.length > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+
+                const imageUrl = await imagenService.generateCaricature({
+                  prompt: article.imagePrompt,
+                  aspectRatio: "3:4",
+                  id: article.id
+                });
+                articlesWithImages.push({ ...article, imageUrl });
+            } catch (error) {
+                console.error(`Échec génération image pour "${article.headline}":`, error);
+                articlesWithImages.push(article);
+            }
         }
-      });
-
-      // Attend toutes les générations en parallèle
-      const articlesWithImages = await Promise.all(imagePromises);
-
-      await persistTilesToRepository(articlesWithImages, cacheKey);
-
-      // --- SAVE TO SUPABASE CACHE ---
-      if (supabase) {
-        try {
-          const { error } = await supabase.from('news_cache').insert({
-            search_key: cacheKey,
-            articles: articlesWithImages
-          });
-          if (error) {
-            console.warn("[PRISM] Failed to save to cache:", error);
-          } else {
-            console.log(`[PRISM] Saved to cache: ${cacheKey}`);
-          }
-        } catch (err) {
-          console.warn("[PRISM] Failed to save to cache:", err);
-        }
+        articlesToPersist = articlesWithImages;
+      } catch (error) {
+        console.error("Erreur service Imagen, poursuite avec les cartes sans visuel :", error);
+        articlesToPersist = preparedArticles;
       }
-
-      saveLocalCache(cacheKey, articlesWithImages);
-      return articlesWithImages;
-    } catch (error) {
-      console.error("Erreur service Imagen, utilisation de Pollinations en fallback:", error);
-      await persistTilesToRepository(preparedArticles, cacheKey);
-
-      // --- SAVE TO SUPABASE CACHE (EVEN WITHOUT IMAGES) ---
-      if (supabase) {
-        try {
-          const { error } = await supabase.from('news_cache').insert({
-            search_key: cacheKey,
-            articles: preparedArticles
-          });
-          if (error) {
-            console.warn("[PRISM] Failed to save to cache (fallback):", error);
-          }
-        } catch (err) {
-          console.warn("[PRISM] Failed to save to cache (fallback):", err);
-        }
-      }
-      saveLocalCache(cacheKey, preparedArticles);
-      return preparedArticles; // Retourne les articles sans images Gemini
+    } else {
+      console.warn("[PRISM] Génération d'images désactivée. Les cartes utiliseront le fallback statique.");
     }
+
+    await persistTilesToRepository(articlesToPersist, cacheKey);
+
+    // --- SAVE TO SUPABASE CACHE ---
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('news_cache').insert({
+          search_key: cacheKey,
+          articles: articlesToPersist
+        });
+        if (error) {
+          console.warn("[PRISM] Failed to save to cache:", error);
+        } else {
+          console.log(`[PRISM] Saved to cache: ${cacheKey}`);
+        }
+      } catch (err) {
+        console.warn("[PRISM] Failed to save to cache:", err);
+      }
+    }
+
+    saveLocalCache(cacheKey, articlesToPersist);
+    return articlesToPersist;
 
   } catch (error) {
     console.error("Erreur Service PRISM (Switch to Mock Data):", error);

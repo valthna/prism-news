@@ -7,10 +7,11 @@ import SourceListModal from './SourceListModal';
 import SentimentModal from './SentimentModal';
 import HideInterfaceButton from './HideInterfaceButton';
 import ArticleDetailModal from './ArticleDetailModal';
-import { ChatIcon } from './icons/ChatIcon';
+import { SparklesIcon } from './icons/SparklesIcon';
 import { ShareIcon } from './icons/ShareIcon';
 import CategorySelect from './CategorySelect';
 import { CATEGORY_OPTIONS, getCategoryOption } from '../constants/categories';
+import { PRISM_PROMPTS } from '../services/prompts';
 
 const desktopHorizontalSafeArea: React.CSSProperties = {
   '--safe-area-x': 'clamp(3.5rem, 5vw, 7rem)'
@@ -41,7 +42,7 @@ const heroMediaDimensions: React.CSSProperties = {
   maxWidth: '420px',
   height: '100%',
   maxHeight: '100%',
-  minHeight: '300px' // Sécurité pour éviter une image trop petite
+  minHeight: 'min(300px, 30vh)' // Plus flexible: 300px ou 30% de la hauteur si petit écran
 };
 
 interface NewsCardProps {
@@ -51,6 +52,7 @@ interface NewsCardProps {
   isInterfaceHidden: boolean;
   selectedCategory: string;
   onCategoryFilterChange: (category: string) => void;
+  onDebateVisibilityChange?: (isOpen: boolean) => void;
 }
 
 const NewsCard: React.FC<NewsCardProps> = ({
@@ -59,7 +61,8 @@ const NewsCard: React.FC<NewsCardProps> = ({
   onChatOpen,
   isInterfaceHidden,
   selectedCategory,
-  onCategoryFilterChange
+  onCategoryFilterChange,
+  onDebateVisibilityChange
 }) => {
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
   const [isSourceListOpen, setIsSourceListOpen] = useState(false);
@@ -80,7 +83,7 @@ const NewsCard: React.FC<NewsCardProps> = ({
     [selectedCategory]
   );
 
-  const caricatureStyle = ", premium french newspaper editorial caricature background, prism news tile, expressive ink linework, selective watercolor washes, muted newsprint paper with bold accent colors, elegant 3:4 portrait framing, clean negative space, no text, no typography, no logos, no photorealism, no 3d renders";
+  const caricatureStyle = PRISM_PROMPTS.IMAGE_GENERATION.SHORT_STYLE;
   const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(article.imagePrompt + caricatureStyle)}?width=1080&height=1440&nologo=true&model=flux-pro&enhance=true&safe=true&seed=${article.id}`;
 
   const initialSrc = (article.imageUrl && (article.imageUrl.startsWith('http') || article.imageUrl.startsWith('data:')))
@@ -161,6 +164,10 @@ const NewsCard: React.FC<NewsCardProps> = ({
   }, [isMobileCategoryMenuOpen]);
 
   const toggleMobileReliabilityInfo = () => setIsMobileReliabilityInfoVisible(prev => !prev);
+  useEffect(() => {
+    onDebateVisibilityChange?.(isSentimentModalOpen);
+  }, [isSentimentModalOpen, onDebateVisibilityChange]);
+
 
   useEffect(() => {
     return () => {
@@ -249,15 +256,14 @@ const NewsCard: React.FC<NewsCardProps> = ({
           <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-gray-300">Fiabilité</span>
           <span className="text-xl font-mono text-neon-accent">{reliabilityScore}%</span>
         </div>
-        <span className="w-6 h-6 rounded-full border border-white/20 text-[11px] font-black text-gray-200 flex items-center justify-center bg-black/40">
+        <span className="glass-button w-6 h-6 rounded-full text-[10px] font-black p-0">
           i
         </span>
       </button>
       <div
         ref={mobileReliabilityInfoRef}
-        className={`absolute right-0 mt-3 w-[85vw] max-w-sm rounded-2xl bg-black/90 border border-white/15 backdrop-blur-2xl px-4 py-4 shadow-[0_20px_45px_rgba(0,0,0,0.5)] text-left space-y-3 transition-all duration-300 z-[70] ${
-          isMobileReliabilityInfoVisible ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'
-        }`}
+        className={`absolute right-0 mt-3 w-[85vw] max-w-[calc(100vw-2rem)] rounded-2xl bg-black/90 border border-white/15 backdrop-blur-2xl px-4 py-4 shadow-[0_20px_45px_rgba(0,0,0,0.5)] text-left space-y-3 transition-all duration-300 z-[70] ${isMobileReliabilityInfoVisible ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'
+          }`}
       >
         <div className="text-[9px] font-bold uppercase tracking-[0.35em] text-gray-300">Modèle de calcul</div>
         <div className="space-y-2.5">
@@ -298,14 +304,15 @@ const NewsCard: React.FC<NewsCardProps> = ({
     <>
       <div
         ref={cardRef}
-        className="h-screen w-full flex-shrink-0 snap-start relative overflow-hidden bg-black flex flex-col"
+        className="h-[100dvh] w-full flex-shrink-0 snap-start relative overflow-hidden bg-black flex flex-col"
       >
-        <div className="absolute inset-0 z-0">
+        {/* DESKTOP BACKGROUND - Hidden on mobile to prevent interference */}
+        <div className="absolute inset-0 z-0 hidden lg:block">
           <div className="absolute inset-0 bg-gray-900" />
           {!imageLoaded && (
-             <div className="absolute inset-0 bg-gray-800 animate-pulse z-10">
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]"></div>
-             </div>
+            <div className="absolute inset-0 bg-gray-800 animate-pulse z-10">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]"></div>
+            </div>
           )}
           <img
             src={imageSrc}
@@ -318,24 +325,25 @@ const NewsCard: React.FC<NewsCardProps> = ({
           <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px]" />
         </div>
 
-        <div className="absolute inset-0 z-0 lg:hidden">
+        {/* MOBILE BACKGROUND - High Z-index to ensure visibility */}
+        <div className="absolute inset-0 z-0 lg:hidden bg-gray-900">
           {!imageLoaded && (
-             <div className="absolute inset-0 bg-gray-900 animate-pulse z-10">
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]"></div>
-             </div>
+            <div className="absolute inset-0 bg-gray-900 animate-pulse z-10">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]"></div>
+            </div>
           )}
           <img
             src={imageSrc}
             alt={article.headline}
             onLoad={() => setImageLoaded(true)}
             onError={handleImageError}
-            className={`w-full h-full object-cover transition-all duration-1000 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+            className={`w-full h-full object-cover transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
             style={{
-              filter: isIntersecting ? 'contrast(1.1) saturate(1.1)' : 'grayscale(100%)',
+              filter: 'contrast(1.1) saturate(1.1)',
             }}
           />
-          <div className="absolute inset-x-0 top-0 h-[60%] bg-gradient-to-b from-black/60 via-black/20 to-transparent opacity-80 z-10 pointer-events-none"></div>
-          <div className="absolute inset-x-0 bottom-0 h-[45%] bg-gradient-to-t from-black/70 via-black/30 to-transparent opacity-75 z-10 pointer-events-none"></div>
+          <div className="absolute inset-x-0 top-0 h-[65%] bg-gradient-to-b from-black/80 via-black/40 to-transparent z-10 pointer-events-none"></div>
+          <div className="absolute inset-x-0 bottom-0 h-[60%] bg-gradient-to-t from-black/90 via-black/50 to-transparent z-10 pointer-events-none"></div>
         </div>
 
         <div
@@ -346,128 +354,146 @@ const NewsCard: React.FC<NewsCardProps> = ({
             className="hidden lg:flex flex-col h-full pointer-events-auto max-w-[1920px] mx-auto w-full safe-area-x"
             style={desktopHorizontalSafeArea}
           >
-            <div className="flex items-center justify-between gap-6 py-10 pr-6 flex-wrap">
-              <div className="flex items-center gap-4 min-w-[260px]">
-                <div className="center-perfect w-11 h-11 rounded-full bg-white/5 border border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.05)] text-2xl">
-                  {article.emoji}
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-neon-accent mb-1">Synthèse Prism</span>
-                  <div className="inline-flex items-center gap-2">
-                    {isLive && <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></div>}
-                    <span className="text-[11px] font-mono text-gray-400 uppercase tracking-[0.5em]">{displayDate}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-6 ml-auto flex-wrap justify-end">
-                <div className="min-w-[220px] w-full sm:w-auto">
-                  <CategorySelect
-                    value={selectedCategory}
-                    onChange={onCategoryFilterChange}
-                    hideDescription
-                    className="w-full"
-                  />
-                </div>
-
-                <div ref={reliabilityTriggerRef} className="relative flex flex-col items-end text-right gap-3 max-w-sm">
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 text-right focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 rounded-lg px-2 py-1 -mx-2"
-                    aria-label="Voir le détail du modèle de calcul"
-                    aria-expanded={isReliabilityInfoVisible}
-                    onMouseEnter={openReliabilityInfo}
-                    onMouseLeave={closeReliabilityInfo}
-                    onFocus={openReliabilityInfo}
-                    onBlur={closeReliabilityInfo}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      toggleReliabilityInfo();
-                    }}
-                  >
-                    <div className="flex flex-col items-end leading-tight">
-                      <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400">Fiabilité</span>
-                      <span className="text-3xl font-mono text-neon-accent">
-                        {reliabilityScore}%
-                      </span>
-                    </div>
-                    <span className="w-6 h-6 rounded-full border border-white/20 text-[11px] font-black text-gray-200 flex items-center justify-center bg-black/40">
-                      i
-                    </span>
-                  </button>
-                  <div
-                    ref={reliabilityInfoRef}
-                    className={`absolute top-full right-0 mt-4 w-[18rem] rounded-2xl bg-black/85 border border-white/15 backdrop-blur-2xl px-5 py-4 shadow-[0_20px_45px_rgba(0,0,0,0.45)] text-left space-y-3 transition-all duration-300 z-[60] ${
-                      isReliabilityInfoVisible ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'
-                    }`}
-                  >
-                    <div className="text-[9px] font-bold uppercase tracking-[0.35em] text-gray-300">Modèle de calcul</div>
-                    <div className="space-y-2.5">
-                      <div>
-                        <div className="flex items-center justify-between text-[11px] text-white font-semibold">
-                          <span className="text-gray-200 font-normal">Couverture médiatique</span>
-                          <span>40%</span>
-                        </div>
-                        <p className="text-[10px] text-gray-400 leading-snug">Diversité des sources, équilibre gauche/centre/droite et recoupement sur 24h.</p>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between text-[11px] text-white font-semibold">
-                          <span className="text-gray-200 font-normal">Scores organismes indépendants</span>
-                          <span>35%</span>
-                        </div>
-                        <p className="text-[10px] text-gray-400 leading-snug">Agrégation normalisée des notations Media Bias/Fact Check, AllSides & Reporters sans frontières.</p>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between text-[11px] text-white font-semibold">
-                          <span className="text-gray-200 font-normal">Historique de corrections</span>
-                          <span>15%</span>
-                        </div>
-                        <p className="text-[10px] text-gray-400 leading-snug">Pénalités appliquées si les sources citées publient des errata fréquents.</p>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between text-[11px] text-white font-semibold">
-                          <span className="text-gray-200 font-normal">Signal fact-check temps réel</span>
-                          <span>10%</span>
-                        </div>
-                        <p className="text-[10px] text-gray-400 leading-snug">Alignement avec les alertes des réseaux IFCN et AFP Factuel.</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="pb-4">
-              <h1 className="text-5xl xl:text-6xl 2xl:text-[4.5rem] font-serif font-bold leading-[1.08] text-white drop-shadow-2xl tracking-tight">
-                {article.headline}
-              </h1>
-            </div>
-
-            <div className="flex-1 w-full grid grid-cols-12 gap-10 items-stretch content-start" style={desktopGridGutter}>
+            <div className="flex-1 w-full grid grid-cols-12 gap-6 lg:gap-8 items-stretch content-center min-h-0" style={desktopGridGutter}>
               <div
-                className="col-span-6 flex flex-col justify-between pt-6 pb-6"
+                className="col-span-6 flex flex-col justify-center gap-6 lg:gap-10 pt-2 lg:pt-4 pb-2 lg:pb-4 overflow-hidden"
                 style={{ paddingRight: 'var(--desktop-column-gutter)' } as React.CSSProperties}
               >
+                <div className="flex items-center justify-between w-full mb-2 flex-shrink-0">
+                    <div className="flex items-center gap-4">
+                        <div className="center-perfect w-10 h-10 lg:w-11 lg:h-11 rounded-full bg-white/5 border border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.05)] text-xl lg:text-2xl">
+                          {article.emoji}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[9px] lg:text-[10px] font-bold uppercase tracking-[0.3em] text-neon-accent mb-0.5 lg:mb-1">Synthèse Prism</span>
+                          <div className="inline-flex items-center gap-2">
+                            {isLive && <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></div>}
+                            <span className="text-[10px] lg:text-[11px] font-mono text-gray-400 uppercase tracking-[0.5em]">{displayDate}</span>
+                          </div>
+                        </div>
+                    </div>
+
+                    <div ref={reliabilityTriggerRef} className="relative flex flex-col items-end text-right gap-2 lg:gap-3 max-w-sm">
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 text-right focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 rounded-lg px-2 py-1 -mx-2"
+                        aria-label="Voir le détail du modèle de calcul"
+                        aria-expanded={isReliabilityInfoVisible}
+                        onMouseEnter={openReliabilityInfo}
+                        onMouseLeave={closeReliabilityInfo}
+                        onFocus={openReliabilityInfo}
+                        onBlur={closeReliabilityInfo}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleReliabilityInfo();
+                        }}
+                      >
+                        <div className="flex flex-col items-end leading-tight">
+                          <span className="text-[9px] lg:text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400">Fiabilité</span>
+                          <span className="text-2xl lg:text-3xl font-mono text-neon-accent">
+                            {reliabilityScore}%
+                          </span>
+                        </div>
+                        <span className="glass-button w-5 h-5 lg:w-6 lg:h-6 rounded-full text-[10px] lg:text-[11px] font-black p-0">
+                          i
+                        </span>
+                      </button>
+                      <div
+                        ref={reliabilityInfoRef}
+                        className={`absolute top-full right-0 mt-4 w-[18rem] rounded-2xl bg-black/85 border border-white/15 backdrop-blur-2xl px-5 py-4 shadow-[0_20px_45px_rgba(0,0,0,0.45)] text-left space-y-3 transition-all duration-300 z-[60] ${isReliabilityInfoVisible ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'
+                          }`}
+                      >
+                        <div className="text-[9px] font-bold uppercase tracking-[0.35em] text-gray-300">Modèle de calcul</div>
+                        <div className="space-y-2.5">
+                          <div>
+                            <div className="flex items-center justify-between text-[11px] text-white font-semibold">
+                              <span className="text-gray-200 font-normal">Couverture médiatique</span>
+                              <span>40%</span>
+                            </div>
+                            <p className="text-[10px] text-gray-400 leading-snug">Diversité des sources, équilibre gauche/centre/droite et recoupement sur 24h.</p>
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between text-[11px] text-white font-semibold">
+                              <span className="text-gray-200 font-normal">Scores organismes indépendants</span>
+                              <span>35%</span>
+                            </div>
+                            <p className="text-[10px] text-gray-400 leading-snug">Agrégation normalisée des notations Media Bias/Fact Check, AllSides & Reporters sans frontières.</p>
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between text-[11px] text-white font-semibold">
+                              <span className="text-gray-200 font-normal">Historique de corrections</span>
+                              <span>15%</span>
+                            </div>
+                            <p className="text-[10px] text-gray-400 leading-snug">Pénalités appliquées si les sources citées publient des errata fréquents.</p>
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between text-[11px] text-white font-semibold">
+                              <span className="text-gray-200 font-normal">Signal fact-check temps réel</span>
+                              <span>10%</span>
+                            </div>
+                            <p className="text-[10px] text-gray-400 leading-snug">Alignement avec les alertes des réseaux IFCN et AFP Factuel.</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                </div>
+
+                <div className="flex-shrink-0">
+                  <h1 className="text-2xl lg:text-3xl xl:text-4xl font-serif font-bold leading-tight text-white drop-shadow-2xl tracking-tight break-words line-clamp-3">
+                    {article.headline}
+                  </h1>
+                </div>
+
                 <div
-                  className="border-l-2 border-neon-accent/50 mb-10 space-y-4"
-                  style={{ paddingLeft: 'clamp(1.5rem, 2vw, 2.25rem)' }}
+                  className="border-l-2 border-neon-accent/50 space-y-2 lg:space-y-3 flex-shrink-0"
+                  style={{ paddingLeft: 'clamp(1rem, 1.5vw, 1.5rem)' }}
                 >
-                  <p className="text-lg xl:text-xl text-gray-200 font-light leading-relaxed font-serif line-clamp-4">
-                    {article.summary}
-                  </p>
-                  <div className="flex items-center gap-4">
-                    <button
-                      type="button"
-                      onClick={() => setIsDetailModalOpen(true)}
-                      className="text-[11px] font-bold uppercase tracking-[0.3em] text-neon-accent hover:text-white transition-colors flex items-center gap-2 group"
+                  <div
+                    onClick={() => setIsDetailModalOpen(true)}
+                    className="group cursor-pointer relative pb-1"
+                  >
+                    <p
+                      className="text-sm lg:text-base text-gray-200 font-light leading-relaxed font-serif line-clamp-4 break-words group-hover:text-white transition-colors duration-300"
                     >
-                      <span>Voir l'analyse complète</span>
-                      <span className="group-hover:translate-x-1 transition-transform">→</span>
-                    </button>
+                      {article.summary}
+                      <span className="inline-flex items-center ml-1.5 text-neon-accent opacity-70 group-hover:opacity-100 transition-opacity translate-y-0.5">
+                        <span className="text-[9px] font-bold uppercase tracking-widest mr-1 hidden group-hover:inline-block">Lire</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform">
+                          <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
+                        </svg>
+                      </span>
+                    </p>
+                    <div className="absolute bottom-0 left-0 w-0 h-[1px] bg-neon-accent group-hover:w-1/3 transition-all duration-500 ease-out opacity-50"></div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-end gap-4 pt-2 w-full">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={handleShareArticle}
+                        className="glass-button btn-icon w-9 h-9 relative transition-transform active:scale-95 hover:bg-white/10 group"
+                        title="Partager"
+                      >
+                        <ShareIcon className="w-4 h-4 text-white group-hover:text-neon-accent group-hover:scale-110 transition-all" />
+                      </button>
+                      <button
+                        onClick={onChatOpen}
+                        className="glass-button btn-icon w-9 h-9 relative transition-transform active:scale-95 hover:bg-white/10 group"
+                        title="Comprendre"
+                      >
+                        <SparklesIcon className="w-4 h-4 text-white group-hover:text-neon-accent group-hover:scale-110 transition-all" />
+                      </button>
+                      <ActionButtons
+                        article={article}
+                        onShowSentiment={() => setIsSentimentModalOpen(true)}
+                        className="gap-3"
+                        communityStats={communityStats}
+                        minimal={true}
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="mt-8 flex flex-col gap-6">
+                <div className="pt-2 lg:pt-4 flex flex-col gap-2 flex-shrink-0">
                   <BiasAnalysisDisplay
                     analysis={article.biasAnalysis}
                     sources={article.sources}
@@ -475,32 +501,16 @@ const NewsCard: React.FC<NewsCardProps> = ({
                     onShowSources={() => setIsSourceListOpen(true)}
                     className="w-full bg-transparent border-0 shadow-none p-0"
                   />
-
-                  <div className="flex items-center gap-6 pt-6 border-t border-white/10 mt-auto">
-                    <button onClick={onChatOpen} className="glass-button no-shimmer px-6 py-3 rounded-full flex items-center gap-3 group/ai hover:bg-neon-accent/10 hover:border-neon-accent/30 transition-all">
-                      <ChatIcon className="w-4 h-4 text-neon-accent group-hover/ai:scale-110 transition-transform" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-white group-hover/ai:text-neon-accent transition-colors">Comprendre</span>
-                    </button>
-
-                    <div className="h-8 w-px bg-white/10"></div>
-
-                    <ActionButtons
-                      article={article}
-                      onShowSentiment={() => setIsSentimentModalOpen(true)}
-                    className="flex-row gap-4"
-                    communityStats={communityStats}
-                    />
-                  </div>
                 </div>
               </div>
 
               <div
-                className="col-span-6 flex items-center justify-center py-6"
+                className="col-span-6 flex flex-col items-center justify-center py-4 gap-4 h-full max-h-[80vh]"
                 style={{ paddingLeft: 'var(--desktop-column-gutter)' } as React.CSSProperties}
               >
                 <div
-                  className="relative rounded-[24px] overflow-hidden shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8)] border border-white/10 bg-gray-900 transform transition-transform duration-500 group hover:scale-[1.01] w-full"
-                  style={{ ...heroFrameStyle, ...heroMediaDimensions }}
+                  className="relative rounded-[20px] overflow-hidden shadow-[0_20px_40px_-10px_rgba(0,0,0,0.8)] border border-white/10 bg-gray-900 transform transition-transform duration-500 group hover:scale-[1.01] w-full h-full max-h-[60vh]"
+                  style={{ ...heroFrameStyle, width: '100%', height: '100%' }}
                 >
                   <div className="absolute -inset-4 bg-gradient-to-tr from-neon-accent/20 to-purple-500/20 rounded-[3rem] blur-3xl opacity-40 group-hover:opacity-80 transition-opacity duration-700"></div>
                   <img
@@ -513,39 +523,38 @@ const NewsCard: React.FC<NewsCardProps> = ({
                     className="absolute inset-0 w-full h-full object-cover z-10"
                   />
                   <div className="absolute inset-0 bg-noise opacity-20 mix-blend-overlay z-20"></div>
-                  <div className="absolute inset-0 shadow-[inset_0_0_150px_rgba(0,0,0,0.6)] z-20"></div>
+                  <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(0,0,0,0.6)] z-20"></div>
                 </div>
               </div>
             </div>
           </div>
 
           <div
-            className="lg:hidden flex-1 flex flex-col justify-between pb-36 pointer-events-auto z-40 safe-area-x"
+            className="lg:hidden flex-1 relative pointer-events-auto z-40 safe-area-x pb-32 flex flex-col justify-center"
             style={mobileHorizontalSafeArea}
           >
             <div className="flex flex-col gap-5 overflow-visible">
               <div className="flex items-start justify-between gap-3">
-                <div className="relative flex-1 z-[70]" ref={mobileCategoryMenuRef}>
+                <div className="relative max-w-[200px] z-[70]" ref={mobileCategoryMenuRef}>
                   <button
                     type="button"
                     onClick={() => setIsMobileCategoryMenuOpen(prev => !prev)}
                     aria-haspopup="listbox"
                     aria-expanded={isMobileCategoryMenuOpen}
-                    className="w-full inline-flex items-center gap-3 px-3 py-2 rounded-2xl bg-black/35 backdrop-blur-md border border-white/10 shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 transition-colors"
+                    className="glass-button w-full justify-start gap-2 px-3 py-2 rounded-xl shadow-lg"
                   >
-                    <span className="text-2xl leading-none">{article.emoji}</span>
+                    <span className="text-xl leading-none">{article.emoji}</span>
                     <div className="flex flex-col leading-tight flex-1 min-w-0 text-left">
-                      <span className="text-[8px] font-bold uppercase tracking-[0.5em] text-gray-400">Synthèse PRISM</span>
-                      <span className="text-sm font-semibold uppercase tracking-[0.2em] text-white flex items-center gap-1 truncate">
-                        {activeFilterCategory.emoji} {activeFilterCategory.value}
+                      <span className="text-[7px] font-bold uppercase tracking-[0.5em] text-gray-400">Synthèse PRISM</span>
+                      <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white flex items-center gap-1 truncate">
+                        {activeFilterCategory.value}
                       </span>
                     </div>
-                    <span className="text-xs text-gray-400">▾</span>
+                    <span className="text-[10px] text-gray-400">▾</span>
                   </button>
                   <div
-                    className={`absolute left-0 right-0 top-full mt-2 rounded-2xl border border-white/15 bg-black/90 backdrop-blur-2xl shadow-[0_20px_35px_rgba(0,0,0,0.6)] transition-all duration-200 origin-top z-[80] ${
-                      isMobileCategoryMenuOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-2 pointer-events-none'
-                    }`}
+                    className={`absolute left-0 right-0 top-full mt-2 rounded-2xl border border-white/15 bg-black/90 backdrop-blur-2xl shadow-[0_20px_35px_rgba(0,0,0,0.6)] transition-all duration-200 origin-top z-[80] ${isMobileCategoryMenuOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-2 pointer-events-none'
+                      }`}
                   >
                     <ul role="listbox" aria-label="Catégories" className="max-h-64 overflow-y-auto p-2 space-y-2">
                       {CATEGORY_OPTIONS.map((option) => (
@@ -556,9 +565,8 @@ const NewsCard: React.FC<NewsCardProps> = ({
                               onCategoryFilterChange(option.value);
                               setIsMobileCategoryMenuOpen(false);
                             }}
-                            className={`w-full flex items-start gap-3 px-4 py-3 rounded-2xl text-left transition-colors ${
-                              selectedCategory === option.value ? 'bg-white/10 border border-white/20' : 'bg-transparent hover:bg-white/10'
-                            }`}
+                            className={`w-full flex items-start gap-3 px-4 py-3 rounded-2xl text-left transition-colors ${selectedCategory === option.value ? 'bg-white/10 border border-white/20' : 'bg-transparent hover:bg-white/10'
+                              }`}
                             role="option"
                             aria-selected={selectedCategory === option.value}
                           >
@@ -576,46 +584,52 @@ const NewsCard: React.FC<NewsCardProps> = ({
                 {mobileReliabilitySlot}
               </div>
 
-              <h1 className="text-[2rem] sm:text-4xl font-serif font-bold leading-[1.1] text-white drop-shadow-2xl line-clamp-3 prism-title-effect">
+              <h1 className="text-2xl sm:text-3xl font-serif font-bold leading-tight text-white line-clamp-3 prism-title-effect break-words" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 4px 16px rgba(0,0,0,0.7), 0 0 40px rgba(0,0,0,0.5)' }}>
                 {article.headline}
               </h1>
 
-              <div className="glass-panel rounded-2xl p-5 relative flex flex-col gap-5 shadow-2xl bg-black/70 backdrop-blur-2xl border-white/15">
-                <p className="text-[15px] text-gray-100 font-serif leading-[1.6] line-clamp-4">
+              <div className="glass-panel rounded-xl p-4 relative flex flex-col gap-3 shadow-2xl bg-black/85 backdrop-blur-2xl border-white/20">
+                <p
+                  onClick={() => setIsDetailModalOpen(true)}
+                  className="text-sm text-gray-100 font-serif leading-relaxed line-clamp-4 break-words cursor-pointer active:opacity-80"
+                >
                   {article.summary}
                 </p>
                 <button
                   type="button"
                   onClick={() => setIsDetailModalOpen(true)}
-                  className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.25em] text-neon-accent hover:text-white transition-colors self-start"
+                  className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.25em] text-neon-accent hover:text-white transition-colors self-start"
                 >
                   <span>Voir le détail</span>
-                  <span className="text-base">→</span>
+                  <span className="text-sm">→</span>
                 </button>
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/10">
-                  <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.3em] text-gray-300">
-                    {isLive && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.7)]"></span>}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-white/10">
+                  <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.3em] text-gray-300">
+                    {isLive && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.7)]"></span>}
                     <span>{displayDate}</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3 mt-2">
                     <button
-                      type="button"
                       onClick={handleShareArticle}
-                      className="glass-button no-shimmer px-4 py-3 rounded-full flex items-center gap-2.5 min-h-[44px] active:scale-95 transition-transform"
+                      className="glass-button btn-icon w-9 h-9 relative transition-transform active:scale-95 hover:bg-white/10 group"
+                      title="Partager"
                     >
-                      <ShareIcon className="w-4 h-4 text-neon-accent" />
-                      <span className="text-[10px] font-bold uppercase text-white tracking-wider">Partager</span>
+                      <ShareIcon className="w-4 h-4 text-white group-hover:text-neon-accent group-hover:scale-110 transition-all" />
                     </button>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onChatOpen();
-                      }}
-                      className="glass-button no-shimmer px-4 py-3 rounded-full flex items-center gap-2.5 min-h-[44px] active:scale-95 transition-transform"
+                      onClick={(e) => { e.stopPropagation(); onChatOpen(); }}
+                      className="glass-button btn-icon w-9 h-9 relative transition-transform active:scale-95 hover:bg-white/10 group"
+                      title="Comprendre"
                     >
-                      <ChatIcon className="w-4 h-4 text-neon-accent" />
-                      <span className="text-[10px] font-bold uppercase text-white tracking-wider">Comprendre</span>
+                      <SparklesIcon className="w-4 h-4 text-white group-hover:text-neon-accent group-hover:scale-110 transition-all" />
                     </button>
+                    <ActionButtons
+                      article={article}
+                      onShowSentiment={() => setIsSentimentModalOpen(true)}
+                      className="gap-3"
+                      communityStats={communityStats}
+                      minimal={true}
+                    />
                   </div>
                 </div>
                 {shareFeedback && (
@@ -626,18 +640,18 @@ const NewsCard: React.FC<NewsCardProps> = ({
               </div>
             </div>
 
-            <div className="mt-10 flex flex-row items-stretch justify-end gap-3 h-full max-h-[160px]">
+            <div className="absolute bottom-4 left-0 right-0 z-50">
               <BiasAnalysisDisplay
                 analysis={article.biasAnalysis}
                 sources={article.sources}
                 onSourceSelect={setSelectedSource}
                 onShowSources={() => setIsSourceListOpen(true)}
-                className="flex-1 bg-black/40 backdrop-blur-xl border border-white/15 rounded-2xl p-3 shadow-lg"
+                className="glass-panel rounded-xl p-2 shadow-lg mx-auto max-w-md"
               />
               <ActionButtons
                 article={article}
                 onShowSentiment={() => setIsSentimentModalOpen(true)}
-                className="flex-shrink-0"
+                className="hidden"
                 communityStats={communityStats}
               />
             </div>

@@ -4,12 +4,9 @@ import { NewsArticle, ChatMessage } from '../types';
 import { SendIcon } from './icons/SendIcon';
 import { CloseIcon } from './icons/CloseIcon';
 import { StarIcon } from './icons/StarIcon';
+import { PRISM_PROMPTS } from '../services/prompts';
 
-const DEFAULT_SUGGESTIONS = [
-    "Quels faits sont confirmés ?",
-    "Quelles conséquences à court terme ?",
-    "Quelle voix manque encore ?"
-];
+const DEFAULT_SUGGESTIONS = PRISM_PROMPTS.CHATBOT.DEFAULT_SUGGESTIONS;
 
 const Chatbot: React.FC<{ isOpen: boolean, onClose: () => void, article: NewsArticle | null }> = ({ isOpen, onClose, article }) => {
     const apiKey = process.env.API_KEY;
@@ -23,11 +20,7 @@ const Chatbot: React.FC<{ isOpen: boolean, onClose: () => void, article: NewsArt
     const inputRef = useRef<HTMLInputElement>(null);
     const suggestionPrompts = useMemo(() => {
         if (!article) return DEFAULT_SUGGESTIONS;
-        return [
-            `Pourquoi "${article.headline}" polarise-t-il ?`,
-            `Quels biais ressortent pour "${article.headline}" ?`,
-            `Que faut-il surveiller dans les 6 prochains mois ?`
-        ];
+        return PRISM_PROMPTS.CHATBOT.dynamicSuggestions(article.headline);
     }, [article]);
     const handleSuggestionClick = (prompt: string) => {
         setUserInput(prompt);
@@ -53,13 +46,13 @@ const Chatbot: React.FC<{ isOpen: boolean, onClose: () => void, article: NewsArt
                 console.warn("Chatbot: API Key missing, using mock mode.");
                 setMessages([{
                     role: 'model',
-                    parts: [{ text: `[MODE DÉMO] Je suis prêt à analyser "${article.headline}". Posez-moi une question sur cet article (Réponses simulées).` }]
+                    parts: [{ text: PRISM_PROMPTS.CHATBOT.DEMO_WELCOME(article.headline) }]
                 }]);
                 setTimeout(() => inputRef.current?.focus(), 400);
                 return;
             }
             const ai = new GoogleGenAI({ apiKey: apiKey as string });
-            const systemInstruction = `Tu es PRISM AI, un analyste expert en géopolitique et média. Tu analyses l'article "${article.headline}". Réponds de manière concise, neutre et factuelle.`;
+            const systemInstruction = PRISM_PROMPTS.CHATBOT.SYSTEM_INSTRUCTION(article.headline);
 
             chatSession.current = ai.chats.create({
                 model: 'gemini-2.5-flash',
@@ -67,7 +60,7 @@ const Chatbot: React.FC<{ isOpen: boolean, onClose: () => void, article: NewsArt
             });
             setMessages([{
                 role: 'model',
-                parts: [{ text: `Je suis prêt à analyser "${article.headline}". Quel aspect souhaitez-vous approfondir ?` }]
+                parts: [{ text: PRISM_PROMPTS.CHATBOT.WELCOME_MESSAGE(article.headline) }]
             }]);
             setTimeout(() => inputRef.current?.focus(), 400);
         } else {
@@ -91,12 +84,7 @@ const Chatbot: React.FC<{ isOpen: boolean, onClose: () => void, article: NewsArt
 
         if (!hasApiKey) {
             setTimeout(() => {
-                const mockResponses = [
-                    "Ceci est une réponse simulée. L'article soulève des points intéressants sur les conséquences économiques.",
-                    "En l'absence de connexion neuronale (API Key manquante), je ne peux qu'acquiescer.",
-                    "Tout à fait fascinant. Voudriez-vous explorer les implications à long terme ?",
-                    "D'après mes données (simulées), c'est un sujet clivant."
-                ];
+                const mockResponses = PRISM_PROMPTS.CHATBOT.MOCK_RESPONSES;
                 const randomResponse = mockResponses[Math.floor(Math.random() * mockResponses.length)];
                 setMessages(prev => [...prev, { role: 'model', parts: [{ text: `[DÉMO] ${randomResponse}` }] }]);
                 setIsLoading(false);
@@ -171,7 +159,7 @@ const Chatbot: React.FC<{ isOpen: boolean, onClose: () => void, article: NewsArt
                     )}
                     {messages.map((msg, i) => (
                         <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.role === 'user'
+                            <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm leading-relaxed shadow-sm break-words overflow-hidden ${msg.role === 'user'
                                     ? 'bg-neon-accent text-black font-medium rounded-br-none'
                                     : 'bg-white/10 text-gray-100 border border-white/5 rounded-bl-none'
                                 }`}>

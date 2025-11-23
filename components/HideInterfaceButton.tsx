@@ -28,28 +28,20 @@ const HideInterfaceButton: React.FC<HideInterfaceButtonProps> = ({ isHidden, onP
             onTouchEnd={handleTouchEnd}
             onTouchCancel={handleTouchEnd}
             className={`
-            hide-interface-button group
+            glass-button btn-icon group
             relative z-[60]
-            w-10 h-10
-            rounded-full
-            flex items-center justify-center
-            bg-white/10
-            backdrop-blur-md
-            border border-white/10
             text-gray-300
             shadow-lg
-            active:scale-95
-            transition-all duration-200 ease-out
             lg:hidden
-            ${isHidden ? 'ring-1 ring-white/40 bg-white/20 text-white' : 'hover:bg-white/20 hover:text-white'}
+            ${isHidden ? 'ring-1 ring-white/40 bg-white/20 text-white' : 'hover:text-white'}
       `}
             aria-label={isHidden ? "Relâcher pour afficher l'interface" : "Maintenir pour masquer l'interface"}
             style={{
                 touchAction: 'manipulation',
                 WebkitUserSelect: 'none',
                 userSelect: 'none',
-                minWidth: '2.5rem',
-                minHeight: '2.5rem'
+                minWidth: '44px',
+                minHeight: '44px'
             }}
         >
             <svg

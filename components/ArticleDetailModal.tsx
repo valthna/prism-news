@@ -31,13 +31,14 @@ const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({ article, onClos
 
             <div
                 className={`
-                    relative w-full max-w-2xl max-h-[90vh] 
+                    relative w-[calc(100%-2rem)] sm:w-full max-w-2xl max-h-[85vh] sm:max-h-[90vh]
                     bg-gray-900/95 backdrop-blur-xl 
-                    border-t border-x border-white/10 sm:border sm:rounded-2xl
+                    border border-white/10 rounded-2xl
                     flex flex-col overflow-hidden
                     shadow-2xl
                     transform transition-transform duration-300 cubic-bezier(0.16, 1, 0.3, 1)
                     pointer-events-auto
+                    mb-4 sm:mb-0
                     ${isVisible ? 'translate-y-0 scale-100' : 'translate-y-full sm:translate-y-10 sm:scale-95'}
                 `}
             >

@@ -11,16 +11,10 @@ interface SearchOverlayProps {
 }
 
 const TRENDING_QUERIES = [
-    { label: "Ce qui se joue en Mer Rouge", query: "Mer Rouge tensions maritimes", category: "International" },
-    { label: "Élections US 2024", query: "Élections américaines 2024 sondages", category: "Politique" },
-    { label: "IA & emploi", query: "Impact de l'intelligence artificielle sur l'emploi", category: "Économie" },
-    { label: "Europe & climat", query: "Paquet climat européen", category: "Environnement" }
-];
-
-const QUESTION_PRESETS = [
-    "Quels angles médiatiques manquent sur ce sujet ?",
-    "Quelles sources resteront fiables si la situation évolue ?",
-    "Quel est le risque de désinformation à court terme ?"
+    { label: "COP30 à Belém", query: "COP30 objectifs climatiques Brésil", category: "Environnement" },
+    { label: "Tensions commerciales", query: "Guerre commerciale USA Chine UE impact", category: "Économie" },
+    { label: "Avancées IA Générative", query: "Dernières avancées IA générative modèles multimodaux", category: "Technologie" },
+    { label: "Mission Artemis III", query: "Mission Artemis III retour Lune", category: "Science" }
 ];
 
 const SearchOverlay: React.FC<SearchOverlayProps> = ({ isOpen, onClose, onSearch, currentCategory }) => {
@@ -156,24 +150,9 @@ const SearchOverlay: React.FC<SearchOverlayProps> = ({ isOpen, onClose, onSearch
                         </div>
                     </div>
 
-                    <div className="space-y-3">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em]">Questions rapides pour l'IA</label>
-                        <div className="flex flex-wrap gap-2">
-                            {QUESTION_PRESETS.map((preset) => (
-                                <button
-                                    key={preset}
-                                    onClick={() => setQuery(preset)}
-                                    className="px-4 py-2 rounded-full text-[11px] font-semibold border border-white/10 text-gray-300 hover:text-black hover:bg-white transition-colors"
-                                >
-                                    {preset}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
                     <div className="flex justify-end pt-4">
                         <button
-                            onClick={handleSubmit}
+                            onClick={(e) => handleSubmit(e)}
                             className="px-8 py-3 glass-button rounded-full font-bold text-xs uppercase tracking-widest flex items-center gap-3 group hover:bg-white text-white hover:text-black transition-all"
                         >
                             <span>Lancer l'analyse</span>

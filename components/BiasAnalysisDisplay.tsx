@@ -111,11 +111,11 @@ const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sou
             </div>
 
             <div className="flex flex-col justify-end flex-1 min-h-0">
-                <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-4 w-full"></div>
+                <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-2 w-full"></div>
 
-                <div className="relative h-10 w-full select-none mb-1">
-                    <div className="absolute top-1/2 left-0 right-0 h-1.5 bg-gradient-to-r from-bias-left via-bias-center to-bias-right rounded-full opacity-80 -translate-y-1/2 shadow-inner"></div>
-                    <div className="absolute top-1/2 left-1/2 w-0.5 h-4 bg-white/80 -translate-y-1/2 -translate-x-1/2 z-0 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
+                <div className="relative h-8 w-full select-none mb-1">
+                    <div className="absolute top-1/2 left-0 right-0 h-1 bg-gradient-to-r from-bias-left via-bias-center to-bias-right rounded-full opacity-80 -translate-y-1/2 shadow-inner"></div>
+                    <div className="absolute top-1/2 left-1/2 w-0.5 h-3 bg-white/80 -translate-y-1/2 -translate-x-1/2 z-0 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
 
                     {positionedSources.map((source) => {
                         const fallbackDomain = getFallbackDomain(source);

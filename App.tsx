@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { NewsArticle } from './types';
 import { fetchNewsArticles } from './services/geminiService';
@@ -7,11 +6,15 @@ import Chatbot from './components/Chatbot';
 import ProgressBar from './components/ProgressBar';
 import SettingsModal from './components/SettingsModal';
 import SearchOverlay from './components/SearchOverlay';
+import OnboardingModal from './components/OnboardingModal';
 import { SettingsIcon } from './components/icons/SettingsIcon';
 import { SearchIcon } from './components/icons/SearchIcon';
 import { ShareIcon } from './components/icons/ShareIcon';
+import { RefreshIcon } from './components/icons/RefreshIcon';
 import HideInterfaceButton from './components/HideInterfaceButton';
+import CategorySelect from './components/CategorySelect';
 import { DEFAULT_CATEGORY } from './constants/categories';
+import { progressTracker, type ProgressUpdate } from './services/progressTracker';
 
 const PROGRESS_CAP_BEFORE_COMPLETION = 96;
 const DEFAULT_LOAD_DURATION_MS = 4500;
@@ -28,11 +31,23 @@ type FetchOptions = {
     mode?: FetchMode;
     prependWith?: NewsArticle[];
     focusOnFirst?: boolean;
+    forceRefresh?: boolean;
 };
 
-// --- PRODUCTION GRADE LOADING SCREEN WITH VORTEX ---
+// --- PRODUCTION GRADE LOADING SCREEN WITH REAL-TIME PROGRESS ---
 
-const LoadingScreen: React.FC<{ status: string, count: number }> = ({ status, count }) => {
+interface DetailedLoadingScreenProps {
+    status: string;
+    count: number;
+    detail?: string;
+    metadata?: {
+        vectorName?: string;
+        sourcesFound?: number;
+        currentModel?: string;
+    };
+}
+
+const LoadingScreen: React.FC<DetailedLoadingScreenProps> = ({ status, count, detail, metadata }) => {
     // Create random particles for vortex effect
     const particles = useMemo(() => {
         const types = ['article', 'video', 'image', 'audio', 'data', 'news'];
@@ -100,7 +115,7 @@ const LoadingScreen: React.FC<{ status: string, count: number }> = ({ status, co
             {/* Ambient Background */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(20,20,20,1)_0%,rgba(0,0,0,1)_100%)]"></div>
 
-            <div className="z-10 flex flex-col items-center w-full max-w-xs space-y-20 relative">
+            <div className="z-10 flex flex-col items-center w-full max-w-md space-y-12 relative px-8">
 
                 {/* Vortex Animation Container */}
                 <div className="relative w-48 h-48 flex items-center justify-center perspective-[1000px]">
@@ -139,7 +154,7 @@ const LoadingScreen: React.FC<{ status: string, count: number }> = ({ status, co
                     ))}
                 </div>
 
-                <div className="flex flex-col items-center space-y-3 text-center relative z-30 px-8">
+                <div className="flex flex-col items-center space-y-3 text-center relative z-30">
                     <h1
                         className="text-7xl font-black tracking-tighter italic chromatic-aberration"
                         data-text="PRISM"
@@ -149,17 +164,48 @@ const LoadingScreen: React.FC<{ status: string, count: number }> = ({ status, co
                     <div className="h-px w-24 bg-gradient-to-r from-transparent via-white/50 to-transparent"></div>
                 </div>
 
-                <div className="w-full space-y-3 max-w-[200px]">
-                    <div className="flex justify-between text-[9px] font-mono text-gray-400 uppercase tracking-widest">
-                        <span className="animate-pulse text-neon-accent">{status}</span>
-                        <span>{percentage}%</span>
+                <div className="w-full space-y-4 max-w-[340px]">
+                    {/* Status principal */}
+                    <div className="flex justify-between text-[10px] font-mono text-gray-400 uppercase tracking-widest">
+                        <span className="animate-pulse text-neon-accent font-bold">{status}</span>
+                        <span className="font-bold">{percentage}%</span>
                     </div>
+
+                    {/* Barre de progression */}
                     <div className="w-full h-[2px] bg-white/10 rounded-full overflow-hidden">
                         <div
                             className="h-full bg-gradient-to-r from-neon-accent/50 via-white to-neon-accent/50 shadow-[0_0_15px_rgba(255,255,255,0.8)] transition-all duration-300"
                             style={{ width: `${percentage}%` }}
                         ></div>
                     </div>
+
+                    {/* Détail en temps réel */}
+                    {detail && (
+                        <div className="text-center text-xs text-gray-500 leading-relaxed animate-fade-in min-h-[2.5rem] flex items-center justify-center">
+                            {detail}
+                        </div>
+                    )}
+
+                    {/* Métadonnées optionnelles */}
+                    {metadata && (
+                        <div className="flex flex-wrap gap-2 justify-center">
+                            {metadata.sourcesFound !== undefined && (
+                                <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[9px] font-mono text-gray-400">
+                                    {metadata.sourcesFound} sources
+                                </div>
+                            )}
+                            {metadata.currentModel && (
+                                <div className="px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-[9px] font-mono text-blue-400">
+                                    {metadata.currentModel}
+                                </div>
+                            )}
+                            {metadata.vectorName && (
+                                <div className="px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-[9px] font-mono text-purple-400">
+                                    {metadata.vectorName}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -183,6 +229,13 @@ const LoadingScreen: React.FC<{ status: string, count: number }> = ({ status, co
             @keyframes spin {
                 from { transform: rotate(0deg); }
                 to { transform: rotate(360deg); }
+            }
+            @keyframes fade-in {
+                from { opacity: 0; transform: translateY(4px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            .animate-fade-in {
+                animation: fade-in 0.3s ease-out forwards;
             }
         `}</style>
         </div>
@@ -209,7 +262,10 @@ const ErrorScreen: React.FC<{ message: string }> = ({ message }) => (
 
 
 const App: React.FC = () => {
-    console.log("App loaded - Version 1.0");
+    useEffect(() => {
+        console.log("App loaded - Version 1.0");
+    }, []);
+
     const [articles, setArticles] = useState<NewsArticle[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -220,11 +276,16 @@ const App: React.FC = () => {
     const [currentCategory, setCurrentCategory] = useState<string>(DEFAULT_CATEGORY.value);
     const [currentQuery, setCurrentQuery] = useState<string>('');
     const [isInterfaceHidden, setIsInterfaceHidden] = useState<boolean>(false);
+    const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
     const [isSearchLoading, setIsSearchLoading] = useState<boolean>(false);
+    const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+    const [isDebateExperienceActive, setIsDebateExperienceActive] = useState<boolean>(false);
 
     // Loading State
     const [loadingStatus, setLoadingStatus] = useState(LOADING_PHASES[0].label);
     const [processedCount, setProcessedCount] = useState(0);
+    const [loadingDetail, setLoadingDetail] = useState<string | undefined>(undefined);
+    const [loadingMetadata, setLoadingMetadata] = useState<ProgressUpdate['metadata'] | undefined>(undefined);
 
     const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const completionFrameRef = useRef<number | null>(null);
@@ -232,6 +293,7 @@ const App: React.FC = () => {
     const averageLoadDurationRef = useRef(DEFAULT_LOAD_DURATION_MS);
     const activeLoadDurationRef = useRef(DEFAULT_LOAD_DURATION_MS);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const loaderRunIdRef = useRef(0);
 
     const updateStatusByProgress = useCallback((progressPercent: number) => {
         const phase = LOADING_PHASES.find((step) => progressPercent < step.until);
@@ -265,6 +327,28 @@ const App: React.FC = () => {
             return Math.round(nextPercent * 25);
         });
     }, [updateStatusByProgress]);
+
+    // Subscribe to real-time progress updates for DETAILS only
+    useEffect(() => {
+        const unsubscribe = progressTracker.subscribe((update: ProgressUpdate) => {
+            console.log('[App] Progress detail update:', update);
+            
+            if (update.detail) {
+                setLoadingDetail(update.detail);
+            }
+            if (update.metadata) {
+                setLoadingMetadata(update.metadata);
+            }
+            // Update progress bar if value provided
+            if (update.progress > 0) {
+                updateProgressTowards(update.progress);
+            }
+        });
+
+        return () => {
+            unsubscribe();
+        };
+    }, [updateProgressTowards]);
 
     const startLoadingProgress = useCallback(() => {
         cancelCompletionAnimation();
@@ -332,6 +416,16 @@ const App: React.FC = () => {
     const getArticles = useCallback(async (query?: string, category?: string, options: FetchOptions = {}) => {
         const mode = options.mode ?? 'replace';
         const replaceExisting = mode === 'replace';
+        const loaderRunId = ++loaderRunIdRef.current;
+        const logPrefix = `[PRISM][Loader#${loaderRunId}]`;
+
+        console.info(`${logPrefix} → start`, {
+            query: query ?? 'default',
+            category: category ?? 'Général',
+            mode,
+            prependCount: options.prependWith?.length ?? 0
+        });
+
         const mergeWithExisting = (incoming: NewsArticle[]): NewsArticle[] => {
             if (options.prependWith && options.prependWith.length > 0) {
                 const existingIds = new Set(incoming.map(article => article.id));
@@ -346,9 +440,18 @@ const App: React.FC = () => {
                 setError(null);
                 setArticles([]); // Clear previous articles to show loading screen properly
                 startLoadingProgress();
+                console.info(`${logPrefix} → loading UI engaged`);
             }
 
-            const fetchedArticles = await fetchNewsArticles(query, category);
+            console.info(`${logPrefix} → calling fetchNewsArticles...`, { query, category });
+            let fetchedArticles: NewsArticle[];
+            try {
+                fetchedArticles = await fetchNewsArticles(query, category, options.forceRefresh);
+                console.info(`${logPrefix} → fetch resolved`, { articleCount: fetchedArticles.length });
+            } catch (fetchError) {
+                console.error(`${logPrefix} → fetchNewsArticles FAILED:`, fetchError);
+                throw fetchError;
+            }
 
             if (replaceExisting) {
                 if (loadingStartRef.current) {
@@ -357,16 +460,28 @@ const App: React.FC = () => {
                     averageLoadDurationRef.current = (averageLoadDurationRef.current * 0.6) + (safeElapsed * 0.4);
                 }
 
+                const preparedArticles = mergeWithExisting(fetchedArticles);
+                const strategicFallback = preparedArticles.every(article => typeof article.id === 'string' && article.id.startsWith('strategic-'));
+                if (strategicFallback) {
+                    console.warn(`${logPrefix} → strategic fallback detected`);
+                }
+
+                console.info(`${logPrefix} → animate completion`);
                 animateCompletion();
 
                 setTimeout(() => {
-                    const preparedArticles = mergeWithExisting(fetchedArticles);
+                    if (loaderRunIdRef.current !== loaderRunId) {
+                        console.warn(`${logPrefix} ✕ hydration skipped (superseded by run #${loaderRunIdRef.current})`);
+                        return;
+                    }
+                    console.info(`${logPrefix} → applying ${preparedArticles.length} articles to UI`);
                     setArticles(preparedArticles);
                     if (options.focusOnFirst) {
                         setActiveArticleIndex(0);
                         scrollToTop();
                     }
                     setLoading(false);
+                    console.info(`${logPrefix} ✓ UI ready`);
                 }, 400);
             } else {
                 const searchBatch = fetchedArticles.slice(0, 5);
@@ -381,7 +496,7 @@ const App: React.FC = () => {
             }
 
         } catch (err) {
-            console.error(err);
+            console.error(`${logPrefix} ✕ failed`, err);
             if (replaceExisting) {
                 cleanupProgressTimer();
                 cancelCompletionAnimation();
@@ -393,8 +508,12 @@ const App: React.FC = () => {
                     setError('Erreur système inconnue.');
                 }
                 setLoading(false);
+                console.info(`${logPrefix} ✕ UI reset after failure`);
             }
         } finally {
+            if (!replaceExisting) {
+                console.info(`${logPrefix} → append/prepend flow finished`);
+            }
         }
     }, [startLoadingProgress, animateCompletion, cleanupProgressTimer, cancelCompletionAnimation, scrollToTop]);
 
@@ -402,7 +521,7 @@ const App: React.FC = () => {
 
     useEffect(() => {
         if (hasFetchedRef.current) {
-            return;
+           return;
         }
         hasFetchedRef.current = true;
         getArticles();
@@ -437,6 +556,20 @@ const App: React.FC = () => {
         getArticles(currentQuery || undefined, category);
     }, [currentCategory, currentQuery, getArticles]);
 
+    const handleRefresh = useCallback(async () => {
+        if (isRefreshing) return;
+        setIsRefreshing(true);
+        try {
+            await getArticles(currentQuery || undefined, currentCategory || undefined, {
+                mode: 'replace',
+                focusOnFirst: true,
+                forceRefresh: true
+            });
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, [getArticles, currentQuery, currentCategory, isRefreshing]);
+
     const handleArticleVisible = useCallback((articleId: string) => {
         const index = articles.findIndex(a => a.id === articleId);
         if (index !== -1) {
@@ -468,7 +601,7 @@ const App: React.FC = () => {
     const activeArticle = useMemo(() => articles[activeArticleIndex] || null, [articles, activeArticleIndex]);
     const scrollProgress = articles.length > 0 ? (activeArticleIndex + 1) / articles.length : 0;
 
-    if (loading) return <LoadingScreen status={loadingStatus} count={processedCount} />;
+    if (loading) return <LoadingScreen status={loadingStatus} count={processedCount} detail={loadingDetail} metadata={loadingMetadata} />;
     if (error) return <ErrorScreen message={error} />;
 
     const headerPaddingStyle: React.CSSProperties = {
@@ -483,17 +616,31 @@ const App: React.FC = () => {
 
             {/* BRANDING HEADER - COMPACT & REMOVED TOP SPACE */}
             <div
-                className="absolute top-0 left-0 w-full z-50 pointer-events-none flex justify-between items-center bg-gradient-to-b from-black/60 via-black/20 to-transparent h-16 safe-area-x safe-area-top safe-area-bottom"
+                className={`absolute top-0 left-0 w-full z-50 pointer-events-none flex justify-between items-center bg-gradient-to-b from-black/60 via-black/20 to-transparent h-auto min-h-16 safe-area-x safe-area-top safe-area-bottom transition-opacity duration-300 ${isDebateExperienceActive ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
                 style={headerPaddingStyle}
             >
-                <div className="pointer-events-auto flex items-center h-full">
-                    <div className="relative h-10 px-4 rounded-full bg-white/5 border border-white/10 backdrop-blur-md shadow-lg flex items-center">
+                <div className="pointer-events-auto flex items-center h-full gap-6">
+                    <button
+                        onClick={() => setIsOnboardingOpen(true)}
+                        className="glass-button btn-pill h-11 px-6 shadow-lg hover:bg-white/10"
+                        aria-label="À propos de PRISM"
+                    >
                         <span
                             className="font-black italic text-2xl tracking-tighter leading-none drop-shadow-lg chromatic-aberration relative z-10 block"
                             data-text="PRISM"
                         >
                             PRISM
                         </span>
+                    </button>
+
+                    <div className="hidden lg:block w-56">
+                        <CategorySelect
+                            value={currentCategory}
+                            onChange={handleCategoryFilterChange}
+                            hideDescription
+                            hideLabel
+                            className="w-full"
+                        />
                     </div>
                 </div>
 
@@ -507,7 +654,7 @@ const App: React.FC = () => {
                     <button
                         onClick={() => setIsSearchOpen(true)}
                         disabled={isSearchLoading}
-                        className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-center hover:bg-white/20 transition-colors group shadow-lg touch-target disabled:opacity-60 disabled:cursor-not-allowed"
+                        className="glass-button btn-icon group touch-target shadow-lg"
                         aria-label="Rechercher"
                         aria-busy={isSearchLoading}
                     >
@@ -536,8 +683,16 @@ const App: React.FC = () => {
                         )}
                     </button>
                     <button
+                        onClick={handleRefresh}
+                        disabled={isRefreshing}
+                        className="glass-button btn-icon group touch-target shadow-lg"
+                        aria-label="Actualiser les sujets"
+                    >
+                        <RefreshIcon className={`w-4 h-4 text-gray-300 group-hover:text-white transition-colors ${isRefreshing ? 'animate-spin text-white' : 'group-hover:animate-spin'}`} />
+                    </button>
+                    <button
                         onClick={() => setIsSettingsOpen(true)}
-                        className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-center hover:bg-white/20 transition-colors group shadow-lg touch-target"
+                        className="glass-button btn-icon group touch-target shadow-lg"
                         aria-label="Paramètres"
                     >
                         <SettingsIcon className="w-4 h-4 text-gray-300 group-hover:text-white transition-colors group-hover:rotate-90 duration-500" />
@@ -559,6 +714,7 @@ const App: React.FC = () => {
                         isInterfaceHidden={isInterfaceHidden}
                         selectedCategory={currentCategory}
                         onCategoryFilterChange={handleCategoryFilterChange}
+                        onDebateVisibilityChange={setIsDebateExperienceActive}
                     />
                 ))}
                 {articles.length === 0 && !loading && (
@@ -585,6 +741,11 @@ const App: React.FC = () => {
                 onClose={() => setIsSearchOpen(false)}
                 onSearch={handleSearch}
                 currentCategory={currentCategory}
+            />
+
+            <OnboardingModal
+                isOpen={isOnboardingOpen}
+                onClose={() => setIsOnboardingOpen(false)}
             />
         </div>
     );

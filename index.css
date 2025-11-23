@@ -7,16 +7,23 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #050505;
+  overflow-x: hidden;
+  width: 100%;
 }
 
-/* Safe Area pour iOS */
+html {
+  overflow-x: hidden;
+  width: 100%;
+}
+
+/* Safe Area pour iOS - Ajustement sans conflit !important */
 .pb-safe-bottom {
-  padding-bottom: 1.5rem !important;
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
 }
 
 @supports (padding: env(safe-area-inset-bottom)) {
   .pb-safe-bottom {
-    padding-bottom: calc(env(safe-area-inset-bottom) + 1.5rem) !important;
+     padding-bottom: calc(env(safe-area-inset-bottom) + 1.5rem);
   }
 }
 
@@ -198,13 +205,32 @@ body::after {
   }
 }
 
+/* PREMIUM BUTTON SYSTEM */
 .glass-button {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+  /* Base Structure */
   position: relative;
   overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  
+  /* Glass Effect */
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  
+  /* Typography */
+  color: white;
+  
+  /* Physics & Transition */
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transform: translateZ(0); /* Hardware accel */
+  
+  /* Shadow */
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.1),
+    inset 0 1px 1px rgba(255, 255, 255, 0.15);
 }
 
 .glass-button::before {
@@ -214,12 +240,14 @@ body::after {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-  transition: left 0.5s ease;
-}
-
-.glass-button.no-shimmer::before {
-  display: none;
+  background: linear-gradient(
+    90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.1), 
+    transparent
+  );
+  transition: left 0.7s ease;
+  pointer-events: none;
 }
 
 .glass-button:hover::before {
@@ -228,17 +256,43 @@ body::after {
 
 .glass-button:hover {
   background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.3);
   box-shadow: 
-    0 0 24px rgba(255, 255, 255, 0.1),
-    0 4px 12px rgba(0,0,0,0.2);
+    0 8px 24px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(255, 255, 255, 0.1);
   transform: translateY(-2px) scale(1.02);
 }
 
 .glass-button:active {
-  background: rgba(255, 255, 255, 0.1);
-  transform: translateY(0) scale(0.96);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(0) scale(0.95);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.glass-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Icon Button Variant (Round) */
+.btn-icon {
+  width: 2.75rem; /* 44px */
+  height: 2.75rem; /* 44px */
+  border-radius: 9999px;
+  padding: 0;
+}
+
+/* Pill Button Variant (Text + Icon) */
+.btn-pill {
+  border-radius: 9999px;
+  padding: 0.75rem 1.25rem;
+}
+
+/* Squircle Button Variant (Tiles) */
+.btn-squircle {
+  border-radius: 1rem; /* 16px */
+  padding: 0.875rem; /* 14px */
 }
 
 .no-scrollbar::-webkit-scrollbar {

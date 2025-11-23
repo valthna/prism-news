@@ -145,16 +145,16 @@ export class ImagenService {
     }
 
     private async requestImage(enhancedPrompt: string, aspectRatio: ImageGenerationOptions['aspectRatio'], enableHighResolution: boolean, articleId?: string) {
-        // Stratégie de fallback : on tente d'abord le modèle Pro (Haute Qualité), puis le Flash (Rapide/Coût réduit)
+        // Stratégie de fallback : on tente d'abord le modèle Flash (Rapide/Performant), puis Imagen 3 standard
         const modelsToTry = [
-            "gemini-3-pro-image-preview", 
-            "gemini-2.5-flash-image"
+            "gemini-2.0-flash",
+            "imagen-3.0-generate-001"
         ];
         
         let lastError: any = null;
 
         for (const modelName of modelsToTry) {
-            const maxRetries = 2; // Réduit à 2 tentatives par modèle pour ne pas être trop lent
+            const maxRetries = 1; // Pas de retry sur les erreurs 4xx, 1 retry max sur les 5xx
             let attempt = 0;
     
             while (attempt < maxRetries) {

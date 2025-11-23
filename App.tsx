@@ -622,7 +622,7 @@ const App: React.FC = () => {
                 <div className="pointer-events-auto flex items-center h-full gap-6">
                     <button
                         onClick={() => setIsOnboardingOpen(true)}
-                        className="glass-button btn-pill h-11 px-6 shadow-lg hover:bg-white/10"
+                        className="h-11 px-5 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 backdrop-blur-md transition-all active:scale-95 shadow-sm"
                         aria-label="À propos de PRISM"
                     >
                         <span
@@ -632,16 +632,6 @@ const App: React.FC = () => {
                             PRISM
                         </span>
                     </button>
-
-                    <div className="hidden lg:block w-56">
-                        <CategorySelect
-                            value={currentCategory}
-                            onChange={handleCategoryFilterChange}
-                            hideDescription
-                            hideLabel
-                            className="w-full"
-                        />
-                    </div>
                 </div>
 
                 {/* Header Buttons (Top Right) */}
@@ -654,13 +644,13 @@ const App: React.FC = () => {
                     <button
                         onClick={() => setIsSearchOpen(true)}
                         disabled={isSearchLoading}
-                        className="glass-button btn-icon group touch-target shadow-lg"
+                        className="flex items-center justify-center w-11 h-11 rounded-full bg-white/5 hover:bg-white/10 backdrop-blur-md transition-all active:scale-95"
                         aria-label="Rechercher"
                         aria-busy={isSearchLoading}
                     >
                         {isSearchLoading ? (
                             <svg
-                                className="w-4 h-4 animate-spin text-neon-accent"
+                                className="w-5 h-5 animate-spin text-neon-accent"
                                 viewBox="0 0 24 24"
                                 fill="none"
                             >
@@ -679,23 +669,23 @@ const App: React.FC = () => {
                                 />
                             </svg>
                         ) : (
-                            <SearchIcon className="w-4 h-4 text-gray-300 group-hover:text-white transition-colors" />
+                            <SearchIcon className="w-5 h-5 text-white/90 group-hover:text-white transition-colors" strokeWidth={2} />
                         )}
                     </button>
                     <button
                         onClick={handleRefresh}
                         disabled={isRefreshing}
-                        className="glass-button btn-icon group touch-target shadow-lg"
+                        className="flex items-center justify-center w-11 h-11 rounded-full bg-white/5 hover:bg-white/10 backdrop-blur-md transition-all active:scale-95"
                         aria-label="Actualiser les sujets"
                     >
-                        <RefreshIcon className={`w-4 h-4 text-gray-300 group-hover:text-white transition-colors ${isRefreshing ? 'animate-spin text-white' : 'group-hover:animate-spin'}`} />
+                        <RefreshIcon className={`w-5 h-5 text-white/90 group-hover:text-white transition-colors ${isRefreshing ? 'animate-spin text-white' : 'group-hover:animate-spin'}`} strokeWidth={2} />
                     </button>
                     <button
                         onClick={() => setIsSettingsOpen(true)}
-                        className="glass-button btn-icon group touch-target shadow-lg"
+                        className="flex items-center justify-center w-11 h-11 rounded-full bg-white/5 hover:bg-white/10 backdrop-blur-md transition-all active:scale-95 group"
                         aria-label="Paramètres"
                     >
-                        <SettingsIcon className="w-4 h-4 text-gray-300 group-hover:text-white transition-colors group-hover:rotate-90 duration-500" />
+                        <SettingsIcon className="w-5 h-5 text-white/90 group-hover:text-white transition-colors group-hover:rotate-90 duration-500" strokeWidth={2} />
                     </button>
                 </div>
             </div>

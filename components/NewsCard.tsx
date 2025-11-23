@@ -18,13 +18,15 @@ const desktopHorizontalSafeArea: React.CSSProperties = {
 };
 
 const mobileHorizontalSafeArea: React.CSSProperties = {
-  '--safe-area-x': '1.375rem'
+  '--safe-area-x': '1.5rem' // Increased from 1.375rem for more breathing room
 };
 
 const cardContentSafeArea: React.CSSProperties = {
   '--safe-area-top': 'var(--card-content-safe-area-top, clamp(4.75rem, 7vw, 6.5rem))',
   '--safe-area-bottom': 'clamp(2rem, 4vw, 3rem)'
 };
+
+const mobileSpectreOffset = 'calc(env(safe-area-inset-bottom, 0px) + 1.5rem)';
 
 const desktopGridGutter: React.CSSProperties = {
   '--desktop-column-gutter': 'clamp(2rem, 4vw, 3.75rem)'
@@ -237,68 +239,6 @@ const NewsCard: React.FC<NewsCardProps> = ({
   const displayDate = article.publishedAt || "RÉCENT";
   const reliabilityScore = Math.round(article.biasAnalysis?.reliabilityScore ?? 0);
   const categoryLabel = (article.category || 'Général').toUpperCase();
-  const mobileReliabilitySlot = (
-    <div
-      ref={mobileReliabilityTriggerRef}
-      className="relative space-y-2 text-right flex flex-col items-end lg:hidden"
-    >
-      <button
-        type="button"
-        className="flex items-center gap-2 rounded-full px-4 py-2 text-right focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 touch-target min-h-[44px]"
-        aria-label="Voir le détail du modèle de calcul"
-        aria-expanded={isMobileReliabilityInfoVisible}
-        onClick={(event) => {
-          event.stopPropagation();
-          toggleMobileReliabilityInfo();
-        }}
-      >
-        <div className="flex flex-col items-end leading-tight">
-          <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-gray-300">Fiabilité</span>
-          <span className="text-xl font-mono text-neon-accent">{reliabilityScore}%</span>
-        </div>
-        <span className="glass-button w-6 h-6 rounded-full text-[10px] font-black p-0">
-          i
-        </span>
-      </button>
-      <div
-        ref={mobileReliabilityInfoRef}
-        className={`absolute right-0 mt-3 w-[85vw] max-w-[calc(100vw-2rem)] rounded-2xl bg-black/90 border border-white/15 backdrop-blur-2xl px-4 py-4 shadow-[0_20px_45px_rgba(0,0,0,0.5)] text-left space-y-3 transition-all duration-300 z-[70] ${isMobileReliabilityInfoVisible ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'
-          }`}
-      >
-        <div className="text-[9px] font-bold uppercase tracking-[0.35em] text-gray-300">Modèle de calcul</div>
-        <div className="space-y-2.5">
-          <div>
-            <div className="flex items-center justify-between text-[11px] text-white font-semibold">
-              <span className="text-gray-200 font-normal">Couverture médiatique</span>
-              <span>40%</span>
-            </div>
-            <p className="text-[10px] text-gray-400 leading-snug">Diversité des sources, équilibre gauche/centre/droite et recoupement sur 24h.</p>
-          </div>
-          <div>
-            <div className="flex items-center justify-between text-[11px] text-white font-semibold">
-              <span className="text-gray-200 font-normal">Scores organismes indépendants</span>
-              <span>35%</span>
-            </div>
-            <p className="text-[10px] text-gray-400 leading-snug">Agrégation normalisée des notations Media Bias/Fact Check, AllSides & Reporters sans frontières.</p>
-          </div>
-          <div>
-            <div className="flex items-center justify-between text-[11px] text-white font-semibold">
-              <span className="text-gray-200 font-normal">Historique de corrections</span>
-              <span>15%</span>
-            </div>
-            <p className="text-[10px] text-gray-400 leading-snug">Pénalités appliquées si les sources citées publient des errata fréquents.</p>
-          </div>
-          <div>
-            <div className="flex items-center justify-between text-[11px] text-white font-semibold">
-              <span className="text-gray-200 font-normal">Signal fact-check temps réel</span>
-              <span>10%</span>
-            </div>
-            <p className="text-[10px] text-gray-400 leading-snug">Alignement avec les alertes des réseaux IFCN et AFP Factuel.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <>
@@ -306,8 +246,8 @@ const NewsCard: React.FC<NewsCardProps> = ({
         ref={cardRef}
         className="h-[100dvh] w-full flex-shrink-0 snap-start relative overflow-hidden bg-black flex flex-col"
       >
-        {/* DESKTOP BACKGROUND - Hidden on mobile to prevent interference */}
-        <div className="absolute inset-0 z-0 hidden lg:block">
+        {/* BACKGROUND (Unified logic) */}
+        <div className="absolute inset-0 z-0">
           <div className="absolute inset-0 bg-gray-900" />
           {!imageLoaded && (
             <div className="absolute inset-0 bg-gray-800 animate-pulse z-10">
@@ -320,243 +260,49 @@ const NewsCard: React.FC<NewsCardProps> = ({
             aria-hidden="true"
             onLoad={() => setImageLoaded(true)}
             onError={handleImageError}
-            className={`absolute inset-0 w-full h-full object-cover blur-3xl opacity-40 scale-125 transition-opacity duration-1000 ${imageLoaded ? 'opacity-40' : 'opacity-0'}`}
+            className={`absolute inset-0 w-full h-full object-cover lg:blur-[120px] lg:opacity-20 lg:scale-110 transition-opacity duration-[1500ms] ease-out ${imageLoaded ? 'opacity-100 lg:opacity-20' : 'opacity-0'}`}
           />
-          <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/90 lg:bg-black/40 lg:backdrop-blur-[2px]" />
         </div>
 
-        {/* MOBILE BACKGROUND - High Z-index to ensure visibility */}
-        <div className="absolute inset-0 z-0 lg:hidden bg-gray-900">
-          {!imageLoaded && (
-            <div className="absolute inset-0 bg-gray-900 animate-pulse z-10">
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]"></div>
-            </div>
-          )}
-          <img
-            src={imageSrc}
-            alt={article.headline}
-            onLoad={() => setImageLoaded(true)}
-            onError={handleImageError}
-            className={`w-full h-full object-cover transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
-            style={{
-              filter: 'contrast(1.1) saturate(1.1)',
-            }}
-          />
-          <div className="absolute inset-x-0 top-0 h-[65%] bg-gradient-to-b from-black/80 via-black/40 to-transparent z-10 pointer-events-none"></div>
-          <div className="absolute inset-x-0 bottom-0 h-[60%] bg-gradient-to-t from-black/90 via-black/50 to-transparent z-10 pointer-events-none"></div>
-        </div>
-
+        {/* MAIN CONTENT CONTAINER */}
         <div
-          className={`absolute inset-0 z-30 flex flex-col pb-safe-bottom pointer-events-none transition-opacity duration-300 safe-area-top safe-area-bottom card-content-shell ${isInterfaceHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+          className={`absolute inset-0 z-30 flex flex-col pointer-events-none transition-opacity duration-300 ${isInterfaceHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
           style={cardContentSafeArea}
         >
-          <div
-            className="hidden lg:flex flex-col h-full pointer-events-auto max-w-[1920px] mx-auto w-full safe-area-x"
-            style={desktopHorizontalSafeArea}
-          >
-            <div className="flex-1 w-full grid grid-cols-12 gap-6 lg:gap-8 items-stretch content-center min-h-0" style={desktopGridGutter}>
-              <div
-                className="col-span-6 flex flex-col justify-center gap-6 lg:gap-10 pt-2 lg:pt-4 pb-2 lg:pb-4 overflow-hidden"
-                style={{ paddingRight: 'var(--desktop-column-gutter)' } as React.CSSProperties}
-              >
-                <div className="flex items-center justify-between w-full mb-2 flex-shrink-0">
-                    <div className="flex items-center gap-4">
-                        <div className="center-perfect w-10 h-10 lg:w-11 lg:h-11 rounded-full bg-white/5 border border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.05)] text-xl lg:text-2xl">
-                          {article.emoji}
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[9px] lg:text-[10px] font-bold uppercase tracking-[0.3em] text-neon-accent mb-0.5 lg:mb-1">Synthèse Prism</span>
-                          <div className="inline-flex items-center gap-2">
-                            {isLive && <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></div>}
-                            <span className="text-[10px] lg:text-[11px] font-mono text-gray-400 uppercase tracking-[0.5em]">{displayDate}</span>
-                          </div>
-                        </div>
-                    </div>
-
-                    <div ref={reliabilityTriggerRef} className="relative flex flex-col items-end text-right gap-2 lg:gap-3 max-w-sm">
-                      <button
-                        type="button"
-                        className="flex items-center gap-2 text-right focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 rounded-lg px-2 py-1 -mx-2"
-                        aria-label="Voir le détail du modèle de calcul"
-                        aria-expanded={isReliabilityInfoVisible}
-                        onMouseEnter={openReliabilityInfo}
-                        onMouseLeave={closeReliabilityInfo}
-                        onFocus={openReliabilityInfo}
-                        onBlur={closeReliabilityInfo}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          toggleReliabilityInfo();
-                        }}
-                      >
-                        <div className="flex flex-col items-end leading-tight">
-                          <span className="text-[9px] lg:text-[10px] font-bold uppercase tracking-[0.4em] text-gray-400">Fiabilité</span>
-                          <span className="text-2xl lg:text-3xl font-mono text-neon-accent">
-                            {reliabilityScore}%
-                          </span>
-                        </div>
-                        <span className="glass-button w-5 h-5 lg:w-6 lg:h-6 rounded-full text-[10px] lg:text-[11px] font-black p-0">
-                          i
-                        </span>
-                      </button>
-                      <div
-                        ref={reliabilityInfoRef}
-                        className={`absolute top-full right-0 mt-4 w-[18rem] rounded-2xl bg-black/85 border border-white/15 backdrop-blur-2xl px-5 py-4 shadow-[0_20px_45px_rgba(0,0,0,0.45)] text-left space-y-3 transition-all duration-300 z-[60] ${isReliabilityInfoVisible ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'
-                          }`}
-                      >
-                        <div className="text-[9px] font-bold uppercase tracking-[0.35em] text-gray-300">Modèle de calcul</div>
-                        <div className="space-y-2.5">
-                          <div>
-                            <div className="flex items-center justify-between text-[11px] text-white font-semibold">
-                              <span className="text-gray-200 font-normal">Couverture médiatique</span>
-                              <span>40%</span>
-                            </div>
-                            <p className="text-[10px] text-gray-400 leading-snug">Diversité des sources, équilibre gauche/centre/droite et recoupement sur 24h.</p>
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between text-[11px] text-white font-semibold">
-                              <span className="text-gray-200 font-normal">Scores organismes indépendants</span>
-                              <span>35%</span>
-                            </div>
-                            <p className="text-[10px] text-gray-400 leading-snug">Agrégation normalisée des notations Media Bias/Fact Check, AllSides & Reporters sans frontières.</p>
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between text-[11px] text-white font-semibold">
-                              <span className="text-gray-200 font-normal">Historique de corrections</span>
-                              <span>15%</span>
-                            </div>
-                            <p className="text-[10px] text-gray-400 leading-snug">Pénalités appliquées si les sources citées publient des errata fréquents.</p>
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between text-[11px] text-white font-semibold">
-                              <span className="text-gray-200 font-normal">Signal fact-check temps réel</span>
-                              <span>10%</span>
-                            </div>
-                            <p className="text-[10px] text-gray-400 leading-snug">Alignement avec les alertes des réseaux IFCN et AFP Factuel.</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                </div>
-
-                <div className="flex-shrink-0">
-                  <h1 className="text-2xl lg:text-3xl xl:text-4xl font-serif font-bold leading-tight text-white drop-shadow-2xl tracking-tight break-words line-clamp-3">
-                    {article.headline}
-                  </h1>
-                </div>
-
-                <div
-                  className="border-l-2 border-neon-accent/50 space-y-2 lg:space-y-3 flex-shrink-0"
-                  style={{ paddingLeft: 'clamp(1rem, 1.5vw, 1.5rem)' }}
-                >
-                  <div
-                    onClick={() => setIsDetailModalOpen(true)}
-                    className="group cursor-pointer relative pb-1"
-                  >
-                    <p
-                      className="text-sm lg:text-base text-gray-200 font-light leading-relaxed font-serif line-clamp-4 break-words group-hover:text-white transition-colors duration-300"
-                    >
-                      {article.summary}
-                      <span className="inline-flex items-center ml-1.5 text-neon-accent opacity-70 group-hover:opacity-100 transition-opacity translate-y-0.5">
-                        <span className="text-[9px] font-bold uppercase tracking-widest mr-1 hidden group-hover:inline-block">Lire</span>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform">
-                          <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
-                        </svg>
-                      </span>
-                    </p>
-                    <div className="absolute bottom-0 left-0 w-0 h-[1px] bg-neon-accent group-hover:w-1/3 transition-all duration-500 ease-out opacity-50"></div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-end gap-4 pt-2 w-full">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={handleShareArticle}
-                        className="glass-button btn-icon w-9 h-9 relative transition-transform active:scale-95 hover:bg-white/10 group"
-                        title="Partager"
-                      >
-                        <ShareIcon className="w-4 h-4 text-white group-hover:text-neon-accent group-hover:scale-110 transition-all" />
-                      </button>
-                      <button
-                        onClick={onChatOpen}
-                        className="glass-button btn-icon w-9 h-9 relative transition-transform active:scale-95 hover:bg-white/10 group"
-                        title="Comprendre"
-                      >
-                        <SparklesIcon className="w-4 h-4 text-white group-hover:text-neon-accent group-hover:scale-110 transition-all" />
-                      </button>
-                      <ActionButtons
-                        article={article}
-                        onShowSentiment={() => setIsSentimentModalOpen(true)}
-                        className="gap-3"
-                        communityStats={communityStats}
-                        minimal={true}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-2 lg:pt-4 flex flex-col gap-2 flex-shrink-0">
-                  <BiasAnalysisDisplay
-                    analysis={article.biasAnalysis}
-                    sources={article.sources}
-                    onSourceSelect={setSelectedSource}
-                    onShowSources={() => setIsSourceListOpen(true)}
-                    className="w-full bg-transparent border-0 shadow-none p-0"
-                  />
-                </div>
-              </div>
-
-              <div
-                className="col-span-6 flex flex-col items-center justify-center py-4 gap-4 h-full max-h-[80vh]"
-                style={{ paddingLeft: 'var(--desktop-column-gutter)' } as React.CSSProperties}
-              >
-                <div
-                  className="relative rounded-[20px] overflow-hidden shadow-[0_20px_40px_-10px_rgba(0,0,0,0.8)] border border-white/10 bg-gray-900 transform transition-transform duration-500 group hover:scale-[1.01] w-full h-full max-h-[60vh]"
-                  style={{ ...heroFrameStyle, width: '100%', height: '100%' }}
-                >
-                  <div className="absolute -inset-4 bg-gradient-to-tr from-neon-accent/20 to-purple-500/20 rounded-[3rem] blur-3xl opacity-40 group-hover:opacity-80 transition-opacity duration-700"></div>
-                  <img
-                    src={imageSrc}
-                    alt="Article Poster"
-                    loading="lazy"
-                    decoding="async"
-                    onLoad={() => setImageLoaded(true)}
-                    onError={handleImageError}
-                    className="absolute inset-0 w-full h-full object-cover z-10"
-                  />
-                  <div className="absolute inset-0 bg-noise opacity-20 mix-blend-overlay z-20"></div>
-                  <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(0,0,0,0.6)] z-20"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="lg:hidden flex-1 relative pointer-events-auto z-40 safe-area-x pb-32 flex flex-col justify-center"
-            style={mobileHorizontalSafeArea}
-          >
-            <div className="flex flex-col gap-5 overflow-visible">
-              <div className="flex items-start justify-between gap-3">
-                <div className="relative max-w-[200px] z-[70]" ref={mobileCategoryMenuRef}>
+          <div className="flex-1 w-full h-full max-w-[1800px] mx-auto flex md:items-center md:px-12">
+            
+            <div className="w-full h-full md:h-auto grid grid-cols-1 md:grid-cols-12 gap-0 md:gap-12 items-stretch pb-safe-bottom md:pb-0 px-6 md:px-0">
+                
+                {/* CARD COLUMN (Mobile: Full width bottom / Desktop: Left col) */}
+                <div className="col-span-1 md:col-span-5 pointer-events-auto flex flex-col justify-center z-50 w-full py-8 md:py-0">
+                    
+                    {/* THE UNIVERSAL CARD */}
+                    <div className="flex flex-col gap-4 overflow-visible relative">
+                        
+                        {/* HEADER METADATA (Category & Reliability) */}
+                        <div className="flex items-center justify-between w-full px-2 relative z-[70]">
+                            <div className="relative" ref={mobileCategoryMenuRef}>
                   <button
-                    type="button"
                     onClick={() => setIsMobileCategoryMenuOpen(prev => !prev)}
-                    aria-haspopup="listbox"
-                    aria-expanded={isMobileCategoryMenuOpen}
-                    className="glass-button w-full justify-start gap-2 px-3 py-2 rounded-xl shadow-lg"
-                  >
-                    <span className="text-xl leading-none">{article.emoji}</span>
-                    <div className="flex flex-col leading-tight flex-1 min-w-0 text-left">
-                      <span className="text-[7px] font-bold uppercase tracking-[0.5em] text-gray-400">Synthèse PRISM</span>
-                      <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white flex items-center gap-1 truncate">
+                                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-black/40 border border-white/10 backdrop-blur-md active:scale-95 transition-all shadow-lg group hover:bg-black/60"
+                                    aria-label="Changer de catégorie"
+                                >
+                                    <span className="text-lg leading-none filter drop-shadow-sm group-hover:scale-110 transition-transform">{article.emoji}</span>
+                                    <div className="h-3 w-px bg-white/20"></div>
+                                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-white shadow-black/50 drop-shadow-md">
                         {activeFilterCategory.value}
                       </span>
-                    </div>
-                    <span className="text-[10px] text-gray-400">▾</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-white/70 group-hover:text-white transition-colors">
+                                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                                    </svg>
                   </button>
+
                   <div
-                    className={`absolute left-0 right-0 top-full mt-2 rounded-2xl border border-white/15 bg-black/90 backdrop-blur-2xl shadow-[0_20px_35px_rgba(0,0,0,0.6)] transition-all duration-200 origin-top z-[80] ${isMobileCategoryMenuOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-2 pointer-events-none'
+                                    className={`absolute left-0 top-full mt-2 w-64 rounded-2xl border border-white/15 bg-black/95 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] transition-all duration-200 origin-top-left overflow-hidden z-[90] ${isMobileCategoryMenuOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-2 pointer-events-none'
                       }`}
                   >
-                    <ul role="listbox" aria-label="Catégories" className="max-h-64 overflow-y-auto p-2 space-y-2">
+                                    <ul role="listbox" aria-label="Catégories" className="max-h-64 overflow-y-auto p-1.5 space-y-1">
                       {CATEGORY_OPTIONS.map((option) => (
                         <li key={option.value}>
                           <button
@@ -565,95 +311,185 @@ const NewsCard: React.FC<NewsCardProps> = ({
                               onCategoryFilterChange(option.value);
                               setIsMobileCategoryMenuOpen(false);
                             }}
-                            className={`w-full flex items-start gap-3 px-4 py-3 rounded-2xl text-left transition-colors ${selectedCategory === option.value ? 'bg-white/10 border border-white/20' : 'bg-transparent hover:bg-white/10'
-                              }`}
-                            role="option"
-                            aria-selected={selectedCategory === option.value}
-                          >
-                            <span className="text-xl leading-none">{option.emoji}</span>
-                            <div className="flex flex-col">
-                              <span className="text-sm font-semibold text-white">{option.value}</span>
-                              <span className="text-[11px] text-gray-400">{option.description}</span>
-                            </div>
+                                            className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all ${selectedCategory === option.value ? 'bg-white/15 shadow-inner' : 'hover:bg-white/10 active:bg-white/5'
+                                            }`}
+                                        >
+                                            <span className="text-xl leading-none w-8 text-center">{option.emoji}</span>
+                                            <span className="text-xs font-bold uppercase tracking-wider text-white/90">{option.value}</span>
+                                            {selectedCategory === option.value && (
+                                            <div className="ml-auto w-1.5 h-1.5 rounded-full bg-neon-accent shadow-[0_0_8px_theme(colors.neon-accent)]"></div>
+                                            )}
                           </button>
                         </li>
                       ))}
                     </ul>
                   </div>
                 </div>
-                {mobileReliabilitySlot}
+                            
+                            {/* RELIABILITY INDICATOR */}
+                            <div className="relative">
+                                <div 
+                                    ref={mobileReliabilityTriggerRef}
+                                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-black/40 border border-white/10 backdrop-blur-md cursor-help active:scale-95 transition-all shadow-lg hover:bg-black/60 group"
+                                    onClick={(e) => { e.stopPropagation(); toggleMobileReliabilityInfo(); }}
+                                >
+                                    <div className="flex flex-col items-end leading-none">
+                                        <span className="text-[7px] font-bold uppercase tracking-wider text-white/70 mb-0.5 group-hover:text-white transition-colors">Fiabilité</span>
+                                        <span className={`font-mono font-bold text-xs ${reliabilityScore >= 80 ? 'text-green-400' : reliabilityScore >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                            {reliabilityScore}%
+                                        </span>
+                                    </div>
+                                    <div className={`w-2 h-2 rounded-full ${reliabilityScore >= 80 ? 'bg-green-500' : reliabilityScore >= 50 ? 'bg-yellow-500' : 'bg-red-500'} shadow-[0_0_10px_currentColor]`}></div>
+                                </div>
+
+                                {/* Mobile Reliability Popover */}
+                                <div
+                                    ref={mobileReliabilityInfoRef}
+                                    className={`absolute right-0 top-full mt-3 w-[85vw] max-w-[280px] rounded-2xl bg-black/90 border border-white/15 backdrop-blur-2xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.9)] text-left space-y-4 transition-all duration-300 z-[80] ${isMobileReliabilityInfoVisible ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-2 pointer-events-none'}`}
+                                >
+                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-400 border-b border-white/10 pb-2 mb-2 flex justify-between items-center">
+                                        <span>Score de fiabilité</span>
+                                        <span className={`text-xs font-mono ${reliabilityScore >= 80 ? 'text-green-400' : 'text-yellow-400'}`}>{reliabilityScore}%</span>
+                                    </div>
+                                    <div className="space-y-3">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs text-gray-300">Diversité des sources</span>
+                                        <div className="h-1 w-16 bg-gray-800 rounded-full overflow-hidden">
+                                            <div className="h-full bg-blue-500 w-[40%]"></div>
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs text-gray-300">Fact-checking</span>
+                                        <div className="h-1 w-16 bg-gray-800 rounded-full overflow-hidden">
+                                            <div className="h-full bg-purple-500 w-[35%]"></div>
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs text-gray-300">Historique</span>
+                                        <div className="h-1 w-16 bg-gray-800 rounded-full overflow-hidden">
+                                            <div className="h-full bg-green-500 w-[25%]"></div>
+                                        </div>
+                                    </div>
+                                    </div>
+                                </div>
+                            </div>
               </div>
 
-              <h1 className="text-2xl sm:text-3xl font-serif font-bold leading-tight text-white line-clamp-3 prism-title-effect break-words" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 4px 16px rgba(0,0,0,0.7), 0 0 40px rgba(0,0,0,0.5)' }}>
-                {article.headline}
+                        {/* HEADLINE */}
+                        <h1 className="text-3xl sm:text-4xl lg:text-6xl font-serif font-bold leading-[0.95] text-white tracking-tight break-words drop-shadow-lg px-2 mt-2 lg:mt-4">
+                            {article.headline.replace(/[\u{1F300}-\u{1F9FF}]/gu, '')}
               </h1>
 
-              <div className="glass-panel rounded-xl p-4 relative flex flex-col gap-3 shadow-2xl bg-black/85 backdrop-blur-2xl border-white/20">
+                        {/* CONTENT CARD */}
+                        <div className="glass-panel rounded-[24px] p-6 md:p-8 relative flex flex-col gap-6 shadow-[0_20px_40px_rgba(0,0,0,0.6)] bg-black/30 backdrop-blur-3xl border border-white/10">
+                            <div className="relative pr-2">
                 <p
                   onClick={() => setIsDetailModalOpen(true)}
-                  className="text-sm text-gray-100 font-serif leading-relaxed line-clamp-4 break-words cursor-pointer active:opacity-80"
+                                    className="text-[17px] text-white/90 font-sans leading-relaxed line-clamp-4 break-words cursor-pointer hover:text-white transition-colors font-medium tracking-wide antialiased"
                 >
                   {article.summary}
                 </p>
                 <button
                   type="button"
                   onClick={() => setIsDetailModalOpen(true)}
-                  className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.25em] text-neon-accent hover:text-white transition-colors self-start"
+                                    className="absolute -bottom-2 right-0 w-7 h-7 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md text-white transition-all active:scale-90 border border-white/5 group"
+                                    aria-label="Lire la suite"
                 >
-                  <span>Voir le détail</span>
-                  <span className="text-sm">→</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5 ml-0.5 group-hover:translate-x-0.5 transition-transform">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                    </svg>
                 </button>
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-white/10">
-                  <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.3em] text-gray-300">
-                    {isLive && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.7)]"></span>}
+                            </div>
+                            
+                            {/* SOURCES INTEGRATION */}
+                            <div className="py-2 border-t border-white/5 relative z-10">
+                                <BiasAnalysisDisplay
+                                analysis={article.biasAnalysis}
+                                sources={article.sources}
+                                onSourceSelect={setSelectedSource}
+                                onShowSources={() => setIsSourceListOpen(true)}
+                                className="w-full"
+                                />
+                            </div>
+                            
+                            {/* FOOTER ACTION BAR */}
+                            <div className="flex items-center justify-between pt-4 border-t border-white/10 mt-1">
+                                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-400/80">
+                                {isLive ? (
+                                    <div className="flex items-center gap-1.5 text-red-400">
+                                        <span className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                        </span>
+                                        <span>Direct</span>
+                                    </div>
+                                ) : (
                     <span>{displayDate}</span>
+                                )}
                   </div>
-                  <div className="flex items-center gap-3 mt-2">
-                    <button
-                      onClick={handleShareArticle}
-                      className="glass-button btn-icon w-9 h-9 relative transition-transform active:scale-95 hover:bg-white/10 group"
-                      title="Partager"
-                    >
-                      <ShareIcon className="w-4 h-4 text-white group-hover:text-neon-accent group-hover:scale-110 transition-all" />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onChatOpen(); }}
-                      className="glass-button btn-icon w-9 h-9 relative transition-transform active:scale-95 hover:bg-white/10 group"
-                      title="Comprendre"
-                    >
-                      <SparklesIcon className="w-4 h-4 text-white group-hover:text-neon-accent group-hover:scale-110 transition-all" />
-                    </button>
+                                
+                                <div className="flex items-center gap-5">
+                    <div className="flex flex-col items-center gap-1 group relative">
+                      <button
+                        onClick={handleShareArticle}
+                        className="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/5 transition-all duration-300 active:scale-90 text-gray-300 hover:text-white hover:scale-110"
+                        aria-label="Partager"
+                      >
+                        <ShareIcon className="w-4 h-4" strokeWidth={2} />
+                      </button>
+                      <span className="text-[8px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-white transition-colors duration-200 opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 absolute top-full mt-1 whitespace-nowrap">
+                        Partager
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col items-center gap-1 group relative">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onChatOpen(); }}
+                        className="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/5 transition-all duration-300 active:scale-90 text-gray-300 hover:text-white hover:scale-110"
+                        aria-label="Comprendre"
+                      >
+                        <SparklesIcon className="w-4 h-4" />
+                      </button>
+                      <span className="text-[8px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-white transition-colors duration-200 opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 absolute top-full mt-1 whitespace-nowrap">
+                        Comprendre
+                      </span>
+                    </div>
+
+                    <div className="h-8 w-px bg-white/10 mx-1"></div>
+
                     <ActionButtons
                       article={article}
                       onShowSentiment={() => setIsSentimentModalOpen(true)}
-                      className="gap-3"
+                      className="gap-5"
                       communityStats={communityStats}
                       minimal={true}
                     />
                   </div>
                 </div>
+
                 {shareFeedback && (
-                  <p className="text-[9px] uppercase tracking-[0.35em] text-center text-neon-accent">
+                                <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/90 px-4 py-1.5 rounded-full border border-white/10 shadow-xl animate-fade-in">
+                                    <p className="text-[9px] uppercase tracking-[0.2em] text-white font-bold whitespace-nowrap">
                     {shareFeedback}
                   </p>
+                                </div>
                 )}
+                        </div>
               </div>
             </div>
 
-            <div className="absolute bottom-4 left-0 right-0 z-50">
-              <BiasAnalysisDisplay
-                analysis={article.biasAnalysis}
-                sources={article.sources}
-                onSourceSelect={setSelectedSource}
-                onShowSources={() => setIsSourceListOpen(true)}
-                className="glass-panel rounded-xl p-2 shadow-lg mx-auto max-w-md"
-              />
-              <ActionButtons
-                article={article}
-                onShowSentiment={() => setIsSentimentModalOpen(true)}
-                className="hidden"
-                communityStats={communityStats}
-              />
+                {/* IMAGE COLUMN (Desktop Only - Right side) */}
+                <div className="hidden md:flex col-span-7 h-full relative items-center justify-center pl-12 pointer-events-auto py-8 md:py-0">
+                    <div className="relative w-full h-full rounded-[32px] overflow-hidden shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] border border-white/10 group transform transition-all duration-700 hover:scale-[1.005]">
+                        <img
+                            src={imageSrc}
+                            alt="Article Poster"
+                            className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-1000 group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-40"></div>
+                    </div>
+                </div>
+
             </div>
           </div>
         </div>

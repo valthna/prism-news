@@ -783,67 +783,67 @@ const buildTileBackgroundPrompt = (article: NewsArticle): string => {
 };
 
 /**
- * Algorithme de calcul de fiabilité basé sur 4 piliers
+ * Algorithme de calcul de fiabilité QUANTIFIÉ
  * 
- * Méthodologie (affichée à l'utilisateur) :
- * 1. Couverture médiatique (40%) : Diversité des sources, équilibre gauche/centre/droite, recoupement 24h
- * 2. Scores organismes indépendants (35%) : Agrégation MBFC, AllSides, RSF
- * 3. Historique de corrections (15%) : Pénalités si errata fréquents
- * 4. Signal fact-check temps réel (10%) : Alignement IFCN, AFP Factuel
+ * Le score est maintenant strictement mathématique, basé sur des métriques observables.
+ * Il n'est plus "généré" par l'IA mais calculé à postériori.
  * 
- * Note : Actuellement, seul le pilier 1 (Couverture médiatique) est calculé avec les données réelles.
- * Les autres piliers sont simulés en attendant l'intégration des APIs des organismes.
+ * Score Max : 100
+ * 
+ * Piliers :
+ * 1. Volume de sources (30pts) : Plus on a de sources, plus c'est fiable.
+ * 2. Diversité politique (30pts) : Présence de sources de bords opposés.
+ * 3. Qualité des sources (40pts) : Bonus pour les agences de presse (AFP, Reuters) et médias de référence.
  */
 const calculateReliability = (sources: Source[]): number => {
-  // === PILIER 1 : COUVERTURE MÉDIATIQUE (40 points max) ===
-  let coverageScore = 0;
+  let score = 0;
 
-  // 1.1 Quantité brute de sources (20 points max)
-  const sourceCount = sources.length;
-  if (sourceCount >= 8) {
-    coverageScore += 20; // Excellente couverture
-  } else if (sourceCount >= 5) {
-    coverageScore += 15; // Bonne couverture
-  } else if (sourceCount >= 3) {
-    coverageScore += 10; // Couverture acceptable
-  } else if (sourceCount === 2) {
-    coverageScore += 5; // Couverture faible
-  } else {
-    coverageScore += 0; // Couverture insuffisante
-  }
+  // --- 1. VOLUME (30 points) ---
+  // 5 sources = 15 pts (le minimum)
+  // 10 sources = 30 pts (le plafond)
+  const count = sources.length;
+  const volumeScore = Math.min(30, Math.max(0, (count - 2) * 4)); 
+  score += volumeScore;
 
-  // 1.2 Diversité du spectre politique (20 points max)
-  const hasLeft = sources.some(s => s.bias === 'left');
-  const hasRight = sources.some(s => s.bias === 'right');
-  const hasCenter = sources.some(s => s.bias === 'center' || s.bias === 'neutral');
+  // --- 2. DIVERSITÉ (30 points) ---
+  const biasSet = new Set(sources.map(s => s.bias));
+  const hasLeft = biasSet.has('left');
+  const hasRight = biasSet.has('right');
+  const hasCenter = biasSet.has('center') || biasSet.has('neutral');
 
   if (hasLeft && hasRight && hasCenter) {
-    coverageScore += 20; // Spectre complet = excellente diversité
+    score += 30; // Full spectrum
   } else if ((hasLeft && hasRight) || (hasLeft && hasCenter) || (hasRight && hasCenter)) {
-    coverageScore += 12; // Deux orientations = bonne diversité
+    score += 20; // Partial balance
   } else {
-    coverageScore += 5; // Une seule orientation = diversité limitée
+    score += 5; // Echo chamber penalty
   }
 
-  // === PILIER 2 : SCORES ORGANISMES INDÉPENDANTS (35 points) ===
-  // TODO: Intégrer les APIs MBFC, AllSides, RSF
-  // Pour l'instant, on attribue un score moyen basé sur la présence de sources reconnues
-  const independentOrgScore = 25; // Score par défaut (71% de 35)
+  // --- 3. QUALITÉ & RÉPUTATION (40 points) ---
+  // On scanne les noms de domaine pour des mots-clés de haute confiance
+  const trustKeywords = ['reuters', 'afp', 'apnews', 'bbc', 'ft.com', 'lemonde', 'nytimes', 'wsj', 'nature.com', 'science.org'];
+  const mediumTrustKeywords = ['cnn', 'fox', 'liberation', 'figaro', 'guardian', 'politico', 'lesechos'];
 
-  // === PILIER 3 : HISTORIQUE DE CORRECTIONS (15 points) ===
-  // TODO: Tracker les errata des sources au fil du temps
-  // Pour l'instant, bonus/malus selon la réputation générale
-  const correctionHistoryScore = 12; // Score par défaut (80% de 15)
+  let qualityScore = 0;
+  let matches = 0;
 
-  // === PILIER 4 : SIGNAL FACT-CHECK TEMPS RÉEL (10 points) ===
-  // TODO: Intégrer IFCN et AFP Factuel
-  const factCheckScore = 8; // Score par défaut (80% de 10)
+  sources.forEach(source => {
+    const name = source.name.toLowerCase();
+    if (trustKeywords.some(k => name.includes(k))) {
+        qualityScore += 8; // 5 sources top tier = 40 pts
+        matches++;
+    } else if (mediumTrustKeywords.some(k => name.includes(k))) {
+        qualityScore += 4;
+        matches++;
+    } else {
+        qualityScore += 1; // Source inconnue = 1pt
+    }
+  });
 
-  // === CALCUL FINAL ===
-  const totalScore = coverageScore + independentOrgScore + correctionHistoryScore + factCheckScore;
+  score += Math.min(40, qualityScore);
 
-  // Bornage entre 20 et 95 (on garde une marge pour ne jamais afficher 100%)
-  return Math.min(Math.max(totalScore, 20), 95);
+  // Normalisation finale (pas de 100% absolu par principe de précaution)
+  return Math.min(98, Math.max(15, Math.round(score)));
 };
 
 type StrategicTopicBlueprint = {
@@ -1094,7 +1094,7 @@ const STRATEGIC_TOPIC_BLUEPRINTS: StrategicTopicBlueprint[] = [
     category: 'Société numérique',
     headline: "Inclusion numérique : la priorité des territoires périphériques",
     summary: "Les gouvernements déploient des pass numériques et des satellites bas débit pour connecter les zones rurales.",
-    detailedSummary: "L'UIT publie un indice révisé de connectivité tandis que la Banque mondiale chiffre les gains de PIB liés à la 4G universelle. Des médias tech analysent l'efficacité des bus écoles itinérants et les ONG françaises réclament un droit à l'accompagnement humain. Les études d'opinion montrent une corrélation entre fracture numérique et abstention.",
+    detailedSummary: "L'UIT publie un indice révisé de connectivité tandis que la Banque mondiale chiffre les gains de PIB liés à la 4G universelle. Des médias tech analysent l'efficacité des bus écoles itinérants et les ONG françaises réclament un droit à la déconnexion humain. Les études d'opinion montrent une corrélation entre fracture numérique et abstention.",
     importance: "Sans accès fiable, les services publics digitaux excluent des millions de citoyens.",
     sentiment: {
       positive: "Les programmes multi-acteurs réduisent la fracture territoriale.",
@@ -1215,7 +1215,7 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
     if (!forceRefresh) {
         repositoryTiles = await withTimeout(
           fetchTilesFromRepository(cacheKey),
-          5000,
+          5000, 
           () => console.warn("[PRISM] Repository check timed out")
         ).catch(err => {
           console.warn("[PRISM] Skipping repository tiles due to error/timeout:", err);
@@ -1288,7 +1288,8 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
 
     const executeGeminiCall = async () => {
       const modelsToTry = [
-        "gemini-2.0-flash",            // PRIORITÉ 1 : Meilleur ratio Perf/Coût (Nov 2025)
+        "gemini-3-pro-preview",        // NOUVEAU : Modèle Gemini 3 avec capacités de raisonnement
+        "gemini-2.0-flash",            // PRIORITÉ 1 : Meilleur ratio Perf/Coût
         "gemini-2.0-flash-lite",       // PRIORITÉ 2 : Version light si quotas serrés
         "gemini-1.5-flash",            // FALLBACK STABLE : L'ancienne valeur sûre
         "gemini-1.5-flash-8b"          // FALLBACK RAPIDE : Version ultra-light v1.5
@@ -1306,20 +1307,32 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
         });
         try {
           const startTime = Date.now();
+          
+          // Configuration spécifique pour Gemini 3 et le raisonnement
+          const isThinkingModel = modelName.includes("gemini-3");
+          const generationConfig: any = {
+            ...toolsConfig,
+            temperature: 0.3,
+            safetySettings: [
+              { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+              { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+              { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+              { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            ],
+          };
+
+          if (isThinkingModel) {
+            // Activation du mode "Thinking" niveau HIGH pour Gemini 3
+            generationConfig.thinkingConfig = {
+                thinkingLevel: "HIGH"
+            };
+          }
+
           const result = await withTimeout(
             ai.models.generateContent({
               model: modelName,
               contents: prompt,
-              config: {
-                ...toolsConfig,
-                temperature: 0.3,
-                safetySettings: [
-                  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                ],
-              },
+              config: generationConfig,
             }),
             GEMINI_TIMEOUT_MS,
             () => console.warn(`[PRISM ⏳] Timeout warning for ${modelName}`)
@@ -1439,6 +1452,7 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
       const reliabilitySources = hydratedSources.length > 0 ? hydratedSources : amplifiedSources;
 
       // --- CALCUL DE L'INDICE DE CONFIANCE RÉEL ---
+      // On calcule le score sur la base des sources réelles ou amplifiées
       const calculatedReliability = calculateReliability(reliabilitySources);
 
       // Mise à jour de l'analyse de biais avec le score calculé

@@ -22,17 +22,15 @@ const SearchOverlay: React.FC<SearchOverlayProps> = ({ isOpen, onClose, onSearch
     const [selectedCategory, setSelectedCategory] = useState(currentCategory);
     const [isVisible, setIsVisible] = useState(false);
     const [recentSearches, setRecentSearches] = useState<string[]>([]);
-    const dialogRef = useRef<HTMLDivElement>(null);
-    const titleId = "search-overlay-title";
+    const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (isOpen) {
             setIsVisible(true);
             setSelectedCategory(currentCategory);
+            setTimeout(() => inputRef.current?.focus(), 100);
             const handleKeyDown = (event: KeyboardEvent) => {
-                if (event.key === 'Escape') {
-                    onClose();
-                }
+                if (event.key === 'Escape') onClose();
             };
             document.addEventListener('keydown', handleKeyDown);
             return () => document.removeEventListener('keydown', handleKeyDown);
@@ -63,103 +61,93 @@ const SearchOverlay: React.FC<SearchOverlayProps> = ({ isOpen, onClose, onSearch
         setSelectedCategory(topic.category);
     };
 
-    const handleRecentSelect = (value: string) => {
-        setQuery(value);
-    };
-
     if (!isOpen && !isVisible) return null;
 
     return (
         <div
-            className={`fixed inset-0 z-[60] flex items-start justify-center pt-[15vh] px-4 transition-all duration-500 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+            className={`fixed inset-0 z-[60] flex flex-col bg-black/95 backdrop-blur-2xl transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
             role="dialog"
             aria-modal="true"
-            aria-labelledby={titleId}
-            ref={dialogRef}
         >
-            <div
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-500"
-                onClick={onClose}
-            ></div>
+            {/* Header / Close */}
+            <div className="flex items-center justify-end p-4 pt-safe-top">
+                <button 
+                    onClick={onClose} 
+                    className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 active:scale-95 transition-all"
+                >
+                    <CloseIcon className="w-5 h-5 text-white" />
+                </button>
+            </div>
 
-            <div className={`relative w-full max-w-2xl glass-panel rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden transform transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1) ${isOpen ? 'scale-100 translate-y-0' : 'scale-95 translate-y-4'}`}>
-                <div className="absolute top-4 right-4 z-10">
-                    <button onClick={onClose} className="p-2 rounded-full hover:bg-white/10 transition-colors group">
-                        <CloseIcon className="w-5 h-5 text-gray-400 group-hover:text-white transition-colors" />
-                    </button>
-                </div>
+            <div className="flex-1 flex flex-col max-w-3xl mx-auto w-full px-6 pt-4 pb-safe-bottom overflow-y-auto no-scrollbar">
+                
+                {/* Main Search Input */}
+                <form onSubmit={handleSubmit} className="w-full relative mb-12">
+                    <div className="relative group">
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            className="w-full bg-transparent text-4xl md:text-6xl font-serif font-bold text-white placeholder-white/20 focus:outline-none pb-4 border-b border-white/20 focus:border-neon-accent transition-colors rounded-none caret-neon-accent"
+                            placeholder="Rechercher..."
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                        />
+                        <button 
+                            type="submit"
+                            className="absolute right-0 bottom-4 p-2 opacity-50 group-focus-within:opacity-100 transition-opacity"
+                        >
+                            <SearchIcon className="w-8 h-8 text-white" />
+                        </button>
+                    </div>
+                    
+                    <div className="mt-4 flex items-center gap-2 text-xs font-mono text-gray-400 uppercase tracking-wider animate-fade-in">
+                        <span>Dans</span>
+                        <span className="text-neon-accent bg-neon-accent/10 px-2 py-0.5 rounded border border-neon-accent/20">
+                            {activeCategory.emoji} {activeCategory.value}
+                        </span>
+                    </div>
+                </form>
 
-                <div className="p-8 space-y-8">
-                    <h2 id={titleId} className="sr-only">Recherche avancée PRISM</h2>
-                    <form onSubmit={handleSubmit} className="space-y-3">
-                        <div className="group flex items-center gap-4 rounded-3xl border border-white/10 bg-white/5 px-5 py-4 shadow-[0_15px_35px_rgba(0,0,0,0.35)] focus-within:border-neon-accent/80 focus-within:bg-black/40 transition-all duration-300">
-                            <div className="w-12 h-12 rounded-full border border-white/15 bg-black/40 flex items-center justify-center shadow-inner">
-                                <SearchIcon className="h-6 w-6 text-gray-400 group-focus-within:text-neon-accent transition-colors duration-300" />
-                            </div>
-                            <input
-                                type="text"
-                                className="flex-1 bg-transparent text-3xl font-light text-white placeholder-gray-600 focus:outline-none font-sans tracking-tight"
-                                placeholder="Rechercher un sujet..."
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                autoFocus
-                            />
-                        </div>
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs font-mono text-gray-500 gap-2">
-                            <span>Catégorie active : <span className="text-white/90">{activeCategory.emoji} {activeCategory.value}</span></span>
-                            <span className="text-neon-accent/80">PRISM préparera 5 cartes équilibrées</span>
-                        </div>
-                        <p className="text-[11px] text-gray-500 font-sans">
-                            {activeCategory.description}
-                        </p>
-                    </form>
-
-                    {recentSearches.length > 0 && (
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em]">Recherches récentes</label>
-                            <div className="flex flex-wrap gap-2">
-                                {recentSearches.map(item => (
-                                    <button
-                                        key={item}
-                                        onClick={() => handleRecentSelect(item)}
-                                        className="px-3 py-1.5 rounded-full text-[11px] font-semibold bg-white/5 text-gray-400 border border-white/10 hover:bg-white/15 hover:text-white transition-colors"
-                                    >
-                                        {item}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="space-y-4">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em]">Focus du moment</label>
-                        <div className="grid sm:grid-cols-2 gap-3">
-                            {TRENDING_QUERIES.map((topic) => (
+                {/* Recent Searches */}
+                {recentSearches.length > 0 && (
+                    <div className="mb-10 animate-slide-up" style={{ animationDelay: '0.1s' }}>
+                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-[0.2em] mb-4">Récent</h3>
+                        <div className="flex flex-wrap gap-3">
+                            {recentSearches.map(item => (
                                 <button
-                                    key={topic.label}
-                                    onClick={() => handleTrendingSelect(topic)}
-                                    className="flex items-start gap-3 text-left px-4 py-3 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
+                                    key={item}
+                                    onClick={() => setQuery(item)}
+                                    className="px-4 py-2 rounded-full text-sm bg-white/5 border border-white/10 hover:bg-white/10 active:bg-white/20 transition-colors text-gray-300"
                                 >
-                                    <div className="w-2 h-2 rounded-full bg-neon-accent mt-1"></div>
-                                    <div>
-                                        <p className="text-sm font-semibold text-white">{topic.label}</p>
-                                        <p className="text-[11px] text-gray-400">{topic.category}</p>
-                                    </div>
+                                    {item}
                                 </button>
                             ))}
                         </div>
                     </div>
+                )}
 
-                    <div className="flex justify-end pt-4">
-                        <button
-                            onClick={(e) => handleSubmit(e)}
-                            className="px-8 py-3 glass-button rounded-full font-bold text-xs uppercase tracking-widest flex items-center gap-3 group hover:bg-white text-white hover:text-black transition-all"
-                        >
-                            <span>Lancer l'analyse</span>
-                            <SearchIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                        </button>
+                {/* Trending Grid */}
+                <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
+                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-[0.2em] mb-4">Suggestions</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {TRENDING_QUERIES.map((topic, idx) => (
+                            <button
+                                key={idx}
+                                onClick={() => handleTrendingSelect(topic)}
+                                className="group flex items-start p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 active:scale-[0.98] transition-all text-left"
+                            >
+                                <span className="text-xl mr-3 opacity-60 group-hover:scale-110 transition-transform duration-300">
+                                    {idx === 0 ? '🔥' : idx === 1 ? '📉' : idx === 2 ? '🤖' : '🚀'}
+                                </span>
+                                <div>
+                                    <div className="font-bold text-white mb-0.5 group-hover:text-neon-accent transition-colors">{topic.label}</div>
+                                    <div className="text-xs text-gray-500 font-mono">{topic.category}</div>
+                                </div>
+                            </button>
+                        ))}
                     </div>
                 </div>
+
             </div>
         </div>
     );

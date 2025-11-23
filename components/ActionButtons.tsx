@@ -1,14 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { ThumbsUpIcon } from './icons/ThumbsUpIcon';
 import { ShareIcon } from './icons/ShareIcon';
 import { NewsArticle } from '../types';
 
 // Icône "Avis/Debate"
 const OpinionIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" {...props}>
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" {...props}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
     </svg>
 );
+OpinionIcon.displayName = 'OpinionIcon';
 
 const ActionButton: React.FC<{
     children: React.ReactNode,
@@ -27,37 +29,46 @@ const ActionButton: React.FC<{
         : undefined;
 
     const ButtonContent = (
-        <button
-            onClick={onClick}
-            className={`glass-button btn-icon w-9 h-9 relative disabled:opacity-50 transition-transform active:scale-95 ${minimal ? 'hover:bg-white/10' : ''}`}
-            disabled={!onClick}
-            style={glowStyles}
-            title={label}
-        >
-            {/* Content */}
-            <div className={`relative z-10 transition-all duration-300 flex items-center justify-center ${activeColor ? 'text-white scale-105' : 'group-hover:text-neon-accent group-hover:scale-110'}`}>
-                {React.cloneElement(children as React.ReactElement, { className: "w-4 h-4" })}
-            </div>
+        <div className="relative inline-flex flex-col items-center gap-1">
+            <button
+                onClick={onClick}
+                className={`flex items-center justify-center w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/5 relative disabled:opacity-50 transition-all duration-300 active:scale-90`}
+                disabled={!onClick}
+                style={glowStyles}
+                title={label}
+            >
+                {/* Content */}
+                <div className={`relative z-10 transition-all duration-300 flex items-center justify-center ${activeColor ? 'text-white scale-105' : 'text-gray-300 group-hover:text-white group-hover:scale-110'}`}>
+                    {React.isValidElement(children) 
+                        ? React.cloneElement(children as React.ReactElement, { 
+                            // @ts-ignore
+                            className: `${(children.props as any).className || ''} ${children.type === 'svg' || (children.type as any).displayName?.includes('Icon') ? 'w-4 h-4' : 'w-full h-full flex items-center justify-center'}`,
+                            strokeWidth: 2 
+                          }) 
+                        : children
+                    }
+                </div>
+            </button>
+             <span className="text-[8px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-white transition-colors duration-200 opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 absolute top-full mt-1 whitespace-nowrap">
+                {label}
+            </span>
 
             {/* Counter Badge */}
             {counter !== undefined && (
-                <div className="absolute -top-1 -right-1 bg-white text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-xl border border-black/10 transform scale-0 group-hover:scale-100 transition-transform duration-200 z-20 min-w-[18px] text-center">
+                <div className="pointer-events-none absolute -top-1 -right-1 bg-white text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-xl border border-black/10 transform scale-100 transition-transform duration-200 z-20 min-w-[18px] text-center">
                     {counter}
                 </div>
             )}
-        </button>
+        </div>
     );
 
     if (minimal) {
-        return <div className={`group ${extraClass}`}>{ButtonContent}</div>;
+        return <div className={`group relative flex flex-col items-center ${extraClass}`}>{ButtonContent}</div>;
     }
 
     return (
-        <div className={`flex flex-col items-center gap-2 group ${extraClass}`}>
+        <div className={`flex flex-col items-center gap-2 group relative ${extraClass}`}>
             {ButtonContent}
-            <span className="text-[8px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-white transition-colors duration-200">
-                {label}
-            </span>
         </div>
     );
 };
@@ -94,7 +105,11 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
         return counts;
     });
     const [isShaking, setIsShaking] = useState(false);
-    const hoverTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+    const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const triggerRef = useRef<HTMLDivElement>(null);
+    const popoverRef = useRef<HTMLDivElement>(null);
+    const [popoverCoords, setPopoverCoords] = useState<{ top: number; left: number } | null>(null);
+    const [popoverPlacement, setPopoverPlacement] = useState<'top' | 'bottom'>('top');
 
     const isRow = className.includes('flex-row');
 
@@ -138,88 +153,191 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
     };
 
     const handleMouseLeave = () => {
+        if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
         hoverTimeoutRef.current = setTimeout(() => {
             setShowReactions(false);
-        }, 300);
+        }, 220);
     };
 
-    return (
-        <div className={`flex ${minimal ? 'flex-row' : (isRow ? 'flex-row' : 'flex-col')} items-center gap-4 relative z-40 ${className}`}>
-            {animateReaction && selectedReaction && (
-                <div className="absolute bottom-16 right-0 z-50 pointer-events-none w-full flex justify-center">
-                    <div className="relative">
-                        <span className="absolute text-4xl animate-float-main filter drop-shadow-lg">
-                            {selectedReaction.emoji}
-                        </span>
-                        <span className="absolute text-2xl animate-float-left opacity-0 delay-75">
-                            {selectedReaction.emoji}
-                        </span>
-                        <span className="absolute text-2xl animate-float-right opacity-0 delay-100">
-                            {selectedReaction.emoji}
-                        </span>
-                    </div>
-                </div>
-            )}
+    const updatePopoverPosition = useCallback(() => {
+        if (!showReactions) return;
+        if (typeof window === 'undefined') return;
+        const triggerEl = triggerRef.current;
+        const popoverEl = popoverRef.current;
+        if (!triggerEl || !popoverEl) return;
 
-            <ActionButton label="DÉBAT" onClick={onShowSentiment} minimal={minimal}>
-                <OpinionIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            </ActionButton>
+        const triggerRect = triggerEl.getBoundingClientRect();
+        const popoverWidth = popoverEl.offsetWidth || popoverEl.getBoundingClientRect().width;
+        const popoverHeight = popoverEl.offsetHeight || popoverEl.getBoundingClientRect().height;
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const gap = 16;
+        const horizontalPadding = 12;
 
-            <div className="relative"
+        const preferredLeft = triggerRect.left + (triggerRect.width / 2) - (popoverWidth / 2);
+        const clampedLeft = Math.min(
+            viewportWidth - horizontalPadding - popoverWidth,
+            Math.max(horizontalPadding, preferredLeft)
+        );
+
+        const spaceAbove = triggerRect.top - gap;
+        const spaceBelow = viewportHeight - triggerRect.bottom - gap;
+        const canOpenAbove = spaceAbove >= popoverHeight;
+        const canOpenBelow = spaceBelow >= popoverHeight;
+        const openOnTop = canOpenAbove || !canOpenBelow;
+
+        const top = openOnTop
+            ? Math.max(gap, triggerRect.top - popoverHeight - gap)
+            : Math.min(viewportHeight - gap - popoverHeight, triggerRect.bottom + gap);
+
+        setPopoverCoords({ top, left: clampedLeft });
+        setPopoverPlacement(openOnTop ? 'top' : 'bottom');
+    }, [showReactions]);
+
+    useLayoutEffect(() => {
+        if (!showReactions) return;
+        updatePopoverPosition();
+        const handleWindowChange = () => updatePopoverPosition();
+
+        window.addEventListener('resize', handleWindowChange);
+        window.addEventListener('scroll', handleWindowChange, true);
+        return () => {
+            window.removeEventListener('resize', handleWindowChange);
+            window.removeEventListener('scroll', handleWindowChange, true);
+        };
+    }, [showReactions, updatePopoverPosition]);
+
+    useEffect(() => {
+        return () => {
+            if (hoverTimeoutRef.current) {
+                clearTimeout(hoverTimeoutRef.current);
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!showReactions) {
+            setPopoverCoords(null);
+            return;
+        }
+
+        const handlePointerDown = (event: PointerEvent) => {
+            const target = event.target as Node;
+            if (popoverRef.current?.contains(target)) return;
+            if (triggerRef.current?.contains(target)) return;
+            setShowReactions(false);
+        };
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setShowReactions(false);
+            }
+        };
+
+        document.addEventListener('pointerdown', handlePointerDown);
+        document.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            document.removeEventListener('pointerdown', handlePointerDown);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [showReactions]);
+
+    const portalTarget = typeof document !== 'undefined' ? document.body : null;
+
+    const reactionPopover = portalTarget && showReactions
+        ? createPortal(
+            <div
+                ref={popoverRef}
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
+                className={`
+                    fixed z-[1200] flex items-center gap-1.5 p-1.5 pr-2.5 pl-2.5
+                    bg-black/85 backdrop-blur-xl rounded-full border border-white/15
+                    shadow-[0_12px_40px_rgba(0,0,0,0.6)]
+                    transition-transform transition-opacity duration-200
+                    ${popoverPlacement === 'top' ? 'origin-bottom' : 'origin-top'}
+                `}
+                style={{
+                    top: popoverCoords?.top ?? -9999,
+                    left: popoverCoords?.left ?? -9999,
+                    visibility: popoverCoords ? 'visible' : 'hidden'
+                }}
             >
-                <div className={`
-                    absolute bottom-full mb-4 
-                    left-1/2 -translate-x-1/2
-                    flex items-center gap-1.5 p-1.5 pr-2.5 pl-2.5
-                    bg-black/80 backdrop-blur-xl 
-                    rounded-full border border-white/15 
-                    shadow-[0_8px_32px_rgba(0,0,0,0.6)] 
-                    transition-all duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)
-                    origin-bottom
-                    ${showReactions ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-90 translate-y-4 pointer-events-none'}
-                    z-50 whitespace-nowrap
-                `}>
-                    <div className="absolute top-full left-0 w-full h-4 bg-transparent"></div>
+                {reactions.map((r) => {
+                    const count = communityReactionCounts[r.id] ?? 0;
+                    const isSelected = selectedReaction?.id === r.id;
+                    return (
+                        <button
+                            key={r.id}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleReaction(r);
+                                updatePopoverPosition();
+                            }}
+                            className="group/emoji relative p-1.5 rounded-full hover:bg-white/10 transition-all duration-200 flex flex-col items-center"
+                        >
+                            <span className={`
+                                block text-2xl transform transition-transform duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)
+                                group-hover/emoji:scale-125 group-hover/emoji:-translate-y-1 group-active/emoji:scale-95
+                                ${isSelected ? 'scale-110 drop-shadow-glow' : 'scale-100 grayscale-[0.3] hover:grayscale-0'}
+                            `}>
+                                {r.emoji}
+                            </span>
 
-                    {reactions.map((r) => {
-                        const count = communityReactionCounts[r.id] ?? 0;
-                        const isSelected = selectedReaction?.id === r.id;
-                        return (
-                            <button
-                                key={r.id}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleReaction(r);
-                                }}
-                                className="group/emoji relative p-1.5 rounded-full hover:bg-white/10 transition-all duration-200 flex flex-col items-center"
-                            >
-                                <span className={`
-                                    block text-2xl transform transition-transform duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)
-                                    group-hover/emoji:scale-125 group-hover/emoji:-translate-y-1 group-active/emoji:scale-95
-                                    ${isSelected ? 'scale-110 drop-shadow-glow' : 'scale-100 grayscale-[0.3] hover:grayscale-0'}
-                                `}>
-                                    {r.emoji}
-                                </span>
-                                
-                                {/* Label au survol */}
-                                <span className={`
-                                    absolute -top-8 left-1/2 -translate-x-1/2 
-                                    text-[9px] font-bold uppercase tracking-widest 
-                                    bg-black/90 px-2 py-1 rounded text-white border border-white/10
-                                    opacity-0 group-hover/emoji:opacity-100 
-                                    transition-all duration-200 pointer-events-none
-                                    whitespace-nowrap transform translate-y-1 group-hover/emoji:translate-y-0
-                                `}>
-                                    {r.label}
-                                </span>
-                            </button>
-                        );
-                    })}
-                </div>
+                            <span className="text-[9px] font-bold text-white/50 mt-0.5 tabular-nums group-hover/emoji:text-white transition-colors min-h-[14px]">
+                                {selectedReaction && count > 0 ? count : ''}
+                            </span>
 
-                <div className={`${isShaking ? 'animate-shake' : ''}`}>
+                            {/* Label au survol */}
+                            <span className={`
+                                absolute -top-8 left-1/2 -translate-x-1/2 
+                                text-[9px] font-bold uppercase tracking-widest 
+                                bg-black/90 px-2 py-1 rounded text-white border border-white/10
+                                opacity-0 group-hover/emoji:opacity-100 
+                                transition-all duration-200 pointer-events-none
+                                whitespace-nowrap transform translate-y-1 group-hover/emoji:translate-y-0
+                            `}>
+                                {r.label}
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>,
+            portalTarget
+        )
+        : null;
+
+    return (
+        <>
+            <div className={`flex ${minimal ? 'flex-row' : (isRow ? 'flex-row' : 'flex-col')} items-center gap-4 relative z-40 ${className}`}>
+                {animateReaction && selectedReaction && (
+                    <div className="absolute bottom-16 right-0 z-50 pointer-events-none w-full flex justify-center">
+                        <div className="relative">
+                            <span className="absolute text-4xl animate-float-main filter drop-shadow-lg">
+                                {selectedReaction.emoji}
+                            </span>
+                            <span className="absolute text-2xl animate-float-left opacity-0 delay-75">
+                                {selectedReaction.emoji}
+                            </span>
+                            <span className="absolute text-2xl animate-float-right opacity-0 delay-100">
+                                {selectedReaction.emoji}
+                            </span>
+                        </div>
+                    </div>
+                )}
+
+                <ActionButton label="DÉBAT" onClick={onShowSentiment} minimal={minimal}>
+                    <OpinionIcon className="w-4 h-4" strokeWidth={2} />
+                </ActionButton>
+
+                <div
+                    className="relative"
+                    ref={triggerRef}
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
+                >
+                    <div className={`${isShaking ? 'animate-shake' : ''}`}>
                     <ActionButton
                         label={selectedReaction ? "VOTÉ" : "RÉAGIR"}
                         onClick={() => setShowReactions(!showReactions)}
@@ -227,18 +345,19 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                         counter={totalCommunityReactions}
                         minimal={minimal}
                     >
-                        <div className={`transform transition-transform duration-300 ${animateReaction ? 'scale-125' : ''}`}>
+                        <div className={`flex items-center justify-center transform transition-transform duration-300 ${animateReaction ? 'scale-125' : ''}`}>
                             {selectedReaction ? (
-                                <span className="text-xl leading-none filter drop-shadow-glow animate-pop-in">
+                                <span className="text-[1.35rem] leading-none filter drop-shadow-glow animate-pop-in pt-[1px]">
                                     {selectedReaction.emoji}
                                 </span>
                             ) : (
-                                <ThumbsUpIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                <ThumbsUpIcon className="w-5 h-5" strokeWidth={2} />
                             )}
                         </div>
                     </ActionButton>
                 </div>
             </div>
+            {reactionPopover}
 
             <style>{`
                 @keyframes float-main {
@@ -272,7 +391,8 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                 .animate-pop-in { animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
                 .animate-shake { animation: shake 0.3s cubic-bezier(.36,.07,.19,.97) both; }
             `}</style>
-        </div >
+        </div>
+        </>
     );
 };
 

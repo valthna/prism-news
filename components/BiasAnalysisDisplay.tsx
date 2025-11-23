@@ -76,46 +76,28 @@ const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sou
     }, [sources]);
 
     return (
-        <div className={`flex flex-col h-full justify-between ${className}`}>
-            <div className="flex justify-between items-start mb-1 lg:justify-start lg:gap-4">
-                <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2 text-gray-400">
-                        <div className="flex -space-x-2">
-                            {sources.slice(0, 3).map((s, i) => (
-                                <div key={i} className="w-5 h-5 rounded-full bg-gray-800 border border-black overflow-hidden shadow-sm">
-                                    <img src={s.logoUrl} className="w-full h-full object-cover opacity-80" alt="" />
-                                </div>
-                            ))}
-                        </div>
-                        <button onClick={onShowSources} className="text-[10px] font-bold uppercase tracking-widest hover:text-white transition-colors ml-1">
-                            {sources.length} Sources
-                        </button>
-                    </div>
+        <div className={`flex flex-col h-full justify-center ${className}`}>
+            <div className="flex items-center justify-between gap-3 w-full">
+                {/* Left side: Source count & Verification badge */}
+                <div className="flex flex-col gap-0.5 shrink-0">
+                     <button onClick={onShowSources} className="text-[9px] font-bold uppercase tracking-widest text-gray-300 hover:text-white transition-colors text-left">
+                        {sources.length} Sources
+                    </button>
                     <div className="group relative flex items-center gap-1 cursor-help w-fit">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-green-400/60 group-hover:text-green-400 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-green-400/80 group-hover:text-green-400 transition-colors">
                             <path fillRule="evenodd" d="M16.403 12.652a3 3 0 000-5.304 3 3 0 00-3.75-3.751 3 3 0 00-5.305 0 3 3 0 00-3.751 3.75 3 3 0 000 5.305 3 3 0 003.75 3.751 3 3 0 005.305 0 3 3 0 003.751-3.75zm-2.546-4.46a.75.75 0 00-1.214-.883l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
                         </svg>
-                        <span className="text-[8px] text-gray-500 group-hover:text-gray-300 transition-colors">Vérifié</span>
-                        <div className="absolute bottom-full left-0 mb-2 w-48 p-2.5 bg-black/95 backdrop-blur-xl border border-white/20 rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50 shadow-xl">
-                            <p className="text-[9px] text-gray-300 leading-relaxed">
-                                Positionnement vérifié via <span className="text-white font-bold">Media Bias/Fact Check</span>, <span className="text-white font-bold">AllSides</span> & <span className="text-white font-bold">Décodex</span>
-                            </p>
-                        </div>
+                        <span className="text-[7px] font-bold text-gray-500 group-hover:text-gray-300 transition-colors uppercase tracking-wider">Vérifié</span>
                     </div>
                 </div>
-                {mobileReliabilitySlot && (
-                    <div className="flex-shrink-0">
-                        {mobileReliabilitySlot}
+
+                {/* Right side: Spectrum Analysis */}
+                <div className="flex-1 relative h-6 select-none mt-1">
+                    <div className="absolute top-1/2 left-0 right-0 h-1.5 bg-gradient-to-r from-bias-left via-bias-center to-bias-right rounded-full opacity-90 -translate-y-1/2 shadow-inner flex justify-between items-center px-1">
+                        <span className="text-[5px] font-black text-white/90 uppercase tracking-widest z-0">Gauche</span>
+                        <span className="text-[5px] font-black text-white/90 uppercase tracking-widest z-0">Droite</span>
                     </div>
-                )}
-            </div>
-
-            <div className="flex flex-col justify-end flex-1 min-h-0">
-                <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-2 w-full"></div>
-
-                <div className="relative h-8 w-full select-none mb-1">
-                    <div className="absolute top-1/2 left-0 right-0 h-1 bg-gradient-to-r from-bias-left via-bias-center to-bias-right rounded-full opacity-80 -translate-y-1/2 shadow-inner"></div>
-                    <div className="absolute top-1/2 left-1/2 w-0.5 h-3 bg-white/80 -translate-y-1/2 -translate-x-1/2 z-0 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
+                    <div className="absolute top-1/2 left-1/2 w-px h-2.5 bg-white/60 -translate-y-1/2 -translate-x-1/2 z-0"></div>
 
                     {positionedSources.map((source) => {
                         const fallbackDomain = getFallbackDomain(source);
@@ -129,16 +111,17 @@ const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sou
                                 style={{ left: `${source.displayPosition}%`, transition: 'left 0.5s cubic-bezier(0.17, 0.67, 0.83, 0.67)' }}
                                 onMouseEnter={() => setHoveredSourceId(source.name)}
                                 onMouseLeave={() => setHoveredSourceId(null)}
+                                onClick={() => setHoveredSourceId(source.name)}
                             >
                                 <button
-                                    onClick={() => onSourceSelect(source)}
-                                    className={`relative w-7 h-7 rounded-full bg-[#1c1c1e] border-2 flex items-center justify-center overflow-hidden shadow-lg transition-all duration-200 hover:scale-125 hover:z-20 ${source.bias === 'left' ? 'border-bias-left' :
+                                    onClick={(e) => { e.stopPropagation(); onSourceSelect(source); }}
+                                    className={`relative w-6 h-6 rounded-full bg-[#1c1c1e] border-[0.5px] flex items-center justify-center overflow-hidden shadow-sm transition-all duration-300 hover:scale-125 hover:z-30 ${source.bias === 'left' ? 'border-bias-left' :
                                         source.bias === 'right' ? 'border-bias-right' : 'border-bias-center'
                                         }`}
                                 >
                                     <img
                                         src={source.logoUrl}
-                                        alt=""
+                                        alt={source.name}
                                         className="w-full h-full object-cover"
                                         onError={(event) => {
                                             const img = event.currentTarget;
@@ -153,17 +136,21 @@ const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sou
                                     />
                                 </button>
 
-                                <div className={`absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-black/90 backdrop-blur border border-white/10 px-2 py-1 rounded text=[9px] font-bold text-white whitespace-nowrap transition-all duration-200 pointer-events-none z-50 ${isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
+                                {/* Tooltip */}
+                                <div className={`
+                                    absolute bottom-full mb-2 left-1/2 -translate-x-1/2 
+                                    bg-black/90 backdrop-blur-md border border-white/10 
+                                    px-2 py-1 rounded-lg shadow-xl
+                                    text-[9px] font-bold text-white whitespace-nowrap 
+                                    transition-all duration-200 pointer-events-none z-40
+                                    ${isHovered ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}
+                                `}>
                                     {source.name}
+                                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-black/90 border-r border-b border-white/10 transform rotate-45"></div>
                                 </div>
                             </div>
                         );
                     })}
-
-                    <div className="absolute -bottom-3 w-full flex justify-between px-1 opacity-50 text-[8px] font-black uppercase tracking-widest text-gray-400">
-                        <span>Gauche</span>
-                        <span>Droite</span>
-                    </div>
                 </div>
             </div>
         </div>

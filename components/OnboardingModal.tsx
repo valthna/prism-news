@@ -33,7 +33,6 @@ const markOnboardingCompleted = (): void => {
 
 const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClose }) => {
     const [currentSlide, setCurrentSlide] = useState(0);
-    const [isAnimating, setIsAnimating] = useState(false);
 
     // Slides data - minimal and clean design
     const slides = [
@@ -60,32 +59,23 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClose }) =>
     ];
 
     const prevSlide = useCallback(() => {
-        if (currentSlide > 0 && !isAnimating) {
+        if (currentSlide > 0) {
             hapticTap();
-            setIsAnimating(true);
             setCurrentSlide(curr => curr - 1);
-            setTimeout(() => setIsAnimating(false), 300);
         }
-    }, [currentSlide, isAnimating]);
+    }, [currentSlide]);
 
     const nextSlide = useCallback(() => {
-        if (isAnimating) return;
-        
         hapticTap();
-        setIsAnimating(true);
         
         if (currentSlide < slides.length - 1) {
             setCurrentSlide(curr => curr + 1);
-            setTimeout(() => setIsAnimating(false), 300);
         } else {
             hapticSuccess();
             markOnboardingCompleted();
-            setTimeout(() => {
-                setIsAnimating(false);
-                onClose();
-            }, 150);
+            onClose();
         }
-    }, [currentSlide, slides.length, onClose, isAnimating]);
+    }, [currentSlide, slides.length, onClose]);
 
     const handleClose = useCallback(() => {
         hapticTap();
@@ -142,18 +132,19 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClose }) =>
                     </svg>
                 </button>
 
-                {/* Content */}
+                {/* Content - No heavy animations, just instant swap */}
                 <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 py-8">
                     {/* Emoji icon */}
                     <div 
-                        className={`text-6xl sm:text-7xl transition-all duration-300 ${isAnimating ? 'scale-90 opacity-50' : 'scale-100 opacity-100'}`}
+                        key={`emoji-${currentSlide}`}
+                        className="text-6xl sm:text-7xl"
                         aria-hidden="true"
                     >
                         {slides[currentSlide].emoji}
                     </div>
                     
                     {/* Text */}
-                    <div className={`space-y-3 transition-opacity duration-300 ${isAnimating ? 'opacity-0' : 'opacity-100'}`}>
+                    <div key={`text-${currentSlide}`} className="space-y-3">
                         <h2 id="onboarding-title" className="text-xl sm:text-2xl font-bold text-white">
                             {slides[currentSlide].title}
                         </h2>
@@ -165,24 +156,22 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClose }) =>
 
                 {/* Footer Navigation */}
                 <div className="mt-auto flex flex-col items-center space-y-4">
-                    {/* Dots - using inline styles to ensure correct sizing */}
-                    <div className="flex items-center justify-center" style={{ gap: '6px' }} role="tablist">
+                    {/* Dots - Simple circular indicators */}
+                    <div className="flex items-center justify-center gap-2" role="tablist">
                         {slides.map((_, idx) => (
                             <button
                                 key={idx}
-                                onClick={() => { if (!isAnimating) { hapticTap(); setCurrentSlide(idx); }}}
+                                onClick={() => { hapticTap(); setCurrentSlide(idx); }}
                                 role="tab"
                                 aria-selected={idx === currentSlide}
-                                style={{
-                                    width: idx === currentSlide ? '20px' : '6px',
-                                    height: '6px',
-                                    borderRadius: '3px',
-                                    backgroundColor: idx === currentSlide ? 'white' : 'rgba(255,255,255,0.3)',
-                                    transition: 'all 0.2s ease',
-                                    border: 'none',
-                                    padding: 0,
-                                    cursor: 'pointer'
-                                }}
+                                aria-label={`Aller à la slide ${idx + 1}`}
+                                className={`
+                                    h-2 rounded-full transition-[width,background-color] duration-150 ease-out
+                                    ${idx === currentSlide 
+                                        ? 'w-5 bg-white' 
+                                        : 'w-2 bg-white/30 hover:bg-white/50'
+                                    }
+                                `}
                             />
                         ))}
                     </div>
@@ -190,8 +179,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClose }) =>
                     {/* Button */}
                     <button
                         onClick={nextSlide}
-                        disabled={isAnimating}
-                        className="w-full py-3 bg-white text-black font-semibold rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50"
+                        className="w-full py-3 bg-white text-black font-semibold rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform duration-100"
                     >
                         {currentSlide === slides.length - 1 ? "C'est parti" : "Suivant"}
                         <ChevronRightIcon className="w-4 h-4" />

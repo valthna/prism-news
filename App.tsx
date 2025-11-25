@@ -600,19 +600,70 @@ const App: React.FC = () => {
         getArticles(currentQuery || undefined, category);
     }, [currentCategory, currentQuery, getArticles]);
 
-    const handleRefresh = useCallback(async () => {
+    // Quick refresh - just fetch from database (no AI generation)
+    const handleQuickRefresh = useCallback(async () => {
         if (isRefreshing) return;
         setIsRefreshing(true);
         try {
             await getArticles(currentQuery || undefined, currentCategory || undefined, {
                 mode: 'replace',
                 focusOnFirst: true,
-                forceRefresh: true
+                forceRefresh: false // Just fetch from DB
             });
         } finally {
             setIsRefreshing(false);
         }
     }, [getArticles, currentQuery, currentCategory, isRefreshing]);
+
+    // Deep harvest - regenerate articles with AI (long press 3s)
+    const handleDeepHarvest = useCallback(async () => {
+        if (isRefreshing) return;
+        setIsRefreshing(true);
+        try {
+            await getArticles(currentQuery || undefined, currentCategory || undefined, {
+                mode: 'replace',
+                focusOnFirst: true,
+                forceRefresh: true // Deep harvest with AI
+            });
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, [getArticles, currentQuery, currentCategory, isRefreshing]);
+
+    // Long press detection for refresh button
+    const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const [isLongPressing, setIsLongPressing] = useState(false);
+    const LONG_PRESS_DURATION = 3000; // 3 seconds
+
+    const handleRefreshPointerDown = useCallback(() => {
+        setIsLongPressing(false);
+        longPressTimerRef.current = setTimeout(() => {
+            setIsLongPressing(true);
+            // Vibrate to indicate long press detected
+            if (navigator.vibrate) navigator.vibrate([50, 50, 100]);
+            handleDeepHarvest();
+        }, LONG_PRESS_DURATION);
+    }, [handleDeepHarvest]);
+
+    const handleRefreshPointerUp = useCallback(() => {
+        if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+        }
+        // If not a long press, do quick refresh
+        if (!isLongPressing && !isRefreshing) {
+            handleQuickRefresh();
+        }
+        setIsLongPressing(false);
+    }, [isLongPressing, isRefreshing, handleQuickRefresh]);
+
+    const handleRefreshPointerLeave = useCallback(() => {
+        if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+        }
+        setIsLongPressing(false);
+    }, []);
 
     const handleArticleVisible = useCallback((articleId: string) => {
         const index = articles.findIndex(a => a.id === articleId);
@@ -728,12 +779,23 @@ const App: React.FC = () => {
                         )}
                     </button>
                     <button
-                        onClick={handleRefresh}
+                        onPointerDown={handleRefreshPointerDown}
+                        onPointerUp={handleRefreshPointerUp}
+                        onPointerLeave={handleRefreshPointerLeave}
+                        onContextMenu={(e) => e.preventDefault()}
                         disabled={isRefreshing}
-                        className="flex items-center justify-center w-11 h-11 rounded-full bg-[rgba(25,25,28,0.92)] hover:bg-[rgba(35,35,38,0.95)] border border-white/10 transition-all active:scale-95"
-                        aria-label="Actualiser les sujets"
+                        className={`flex items-center justify-center w-11 h-11 rounded-full border transition-all active:scale-95 select-none ${
+                            isLongPressing 
+                                ? 'bg-green-500/20 border-green-500/50' 
+                                : 'bg-[rgba(25,25,28,0.92)] hover:bg-[rgba(35,35,38,0.95)] border-white/10'
+                        }`}
+                        aria-label="Actualiser (appui long 3s pour régénérer)"
+                        title="Clic = Actualiser | Appui long 3s = Régénérer"
                     >
-                        <RefreshIcon className={`w-5 h-5 text-white/90 group-hover:text-white transition-colors ${isRefreshing ? 'animate-spin text-white' : 'group-hover:animate-spin'}`} strokeWidth={2} />
+                        <RefreshIcon className={`w-5 h-5 transition-colors ${
+                            isRefreshing ? 'animate-spin text-white' : 
+                            isLongPressing ? 'text-green-400' : 'text-white/90'
+                        }`} strokeWidth={2} />
                     </button>
                     <button
                         onClick={() => setIsSettingsOpen(true)}
@@ -776,7 +838,7 @@ const App: React.FC = () => {
                             <p className="text-gray-600 text-sm max-w-xs">Essayez d'actualiser ou de modifier vos critères de recherche</p>
                         </div>
                         <button
-                            onClick={handleRefresh}
+                            onClick={handleQuickRefresh}
                             disabled={isRefreshing}
                             className="mt-4 px-6 py-3 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-full font-bold text-xs uppercase tracking-widest transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-neon-accent disabled:opacity-50"
                         >

@@ -802,27 +802,26 @@ const sortArticlesByRecency = (articles: NewsArticle[]): NewsArticle[] => {
 };
 
 /**
- * Fallback: Récupère les derniers articles depuis la base de données
- * sans filtrer par search_key - utilisé quand tout le reste échoue
+ * Récupère TOUS les articles de la base de données
+ * Utilisé pour afficher l'ensemble du contenu disponible à l'utilisateur
  */
-const fetchLatestArticlesFromDatabase = async (limit: number = MIN_ARTICLES): Promise<NewsArticle[] | null> => {
+const fetchAllArticlesFromDatabase = async (): Promise<NewsArticle[] | null> => {
   if (!isSupabaseActive()) {
-    console.log("[PRISM] Supabase inactive, cannot fetch latest articles");
+    console.log("[PRISM] Supabase inactive, cannot fetch articles");
     return null;
   }
   const client = supabase;
   if (!client) return null;
 
   try {
-    console.log("[PRISM 🔄] Fetching latest articles from database as fallback...");
+    console.log("[PRISM 🔄] Fetching ALL articles from database...");
     const { data, error } = await client
       .from('news_tiles')
       .select('article')
-      .order('created_at', { ascending: false })
-      .limit(limit);
+      .order('created_at', { ascending: false });
 
     if (error) {
-      console.warn("[PRISM] Failed to fetch latest articles:", error);
+      console.warn("[PRISM] Failed to fetch articles:", error);
       if (isNetworkFailure(error)) {
         disableSupabaseForSession('fallback-read', error);
       }
@@ -837,16 +836,19 @@ const fetchLatestArticlesFromDatabase = async (limit: number = MIN_ARTICLES): Pr
     const articles = data.map((row) => row.article as NewsArticle);
     // Tri par fraîcheur (publishedAt) - du plus récent au plus ancien
     const sortedArticles = sortArticlesByRecency(articles);
-    console.log(`[PRISM ✅] Fallback: Retrieved ${sortedArticles.length} latest articles from database (sorted by recency)`);
+    console.log(`[PRISM ✅] Retrieved ${sortedArticles.length} articles from database (sorted by recency)`);
     return sortedArticles;
   } catch (error) {
-    console.warn("[PRISM] Unexpected error fetching latest articles:", error);
+    console.warn("[PRISM] Unexpected error fetching articles:", error);
     if (isNetworkFailure(error)) {
       disableSupabaseForSession('fallback-read', error);
     }
     return null;
   }
 };
+
+// Alias pour compatibilité
+const fetchLatestArticlesFromDatabase = fetchAllArticlesFromDatabase;
 
 const cleanupExpiredTiles = async () => {
   if (!isSupabaseActive()) {

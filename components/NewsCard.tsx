@@ -579,18 +579,20 @@ const NewsCard: React.FC<NewsCardProps> = ({
                   <div className="relative flex flex-col pr-10">
                     <p
                       onClick={() => setIsDetailModalOpen(true)}
-                      className="text-[16px] lg:text-[18px] text-white/85 font-sans leading-relaxed break-words cursor-pointer hover:text-white transition-colors font-normal tracking-wide antialiased line-clamp-3 sm:line-clamp-4 lg:line-clamp-5"
+                      className="text-[16px] lg:text-[18px] text-white/85 font-sans leading-relaxed break-words cursor-pointer hover:text-white transition-colors font-normal tracking-wide antialiased line-clamp-4 sm:line-clamp-5 lg:line-clamp-6"
                     >
                       {renderFormattedText(article.summary)}
                     </p>
+                  </div>
+                  <div className="flex justify-end mt-1">
                     <button
                       type="button"
                       onClick={() => setIsDetailModalOpen(true)}
-                      className="mt-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40 hover:text-white transition-all group w-fit shrink-0"
+                      className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-white/35 hover:text-white/70 transition-all group"
                       aria-label="Voir le détail"
                     >
-                      Voir le détail
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3 group-hover:translate-x-0.5 transition-transform opacity-0 group-hover:opacity-100">
+                      <span>Voir le détail</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-2.5 h-2.5 group-hover:translate-x-0.5 transition-transform">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                       </svg>
                     </button>

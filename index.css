@@ -2,6 +2,79 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ======================================
+   USER SETTINGS EFFECTS
+   ====================================== */
+
+/* Text size scaling */
+:root {
+  --user-text-scale: 1;
+}
+
+/* Apply text scaling to content areas */
+.text-user-scale {
+  font-size: calc(1em * var(--user-text-scale));
+}
+
+/* High contrast mode */
+html.high-contrast {
+  --contrast-boost: 1.15;
+}
+
+html.high-contrast body {
+  background-color: #000000;
+}
+
+html.high-contrast .text-gray-400,
+html.high-contrast .text-gray-500 {
+  color: #a0a0a0 !important;
+}
+
+html.high-contrast .text-\[\#8E8E93\] {
+  color: #b0b0b0 !important;
+}
+
+html.high-contrast .bg-\[rgba\(25\,25\,28\,0\.92\)\],
+html.high-contrast .bg-\[rgba\(35\,35\,38\,0\.95\)\] {
+  background-color: rgba(10, 10, 12, 0.98) !important;
+}
+
+html.high-contrast .border-white\/10 {
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+html.high-contrast .bg-\[#1C1C1E\] {
+  background-color: #0a0a0c !important;
+}
+
+html.high-contrast .text-white {
+  text-shadow: 0 0 1px rgba(255, 255, 255, 0.3);
+}
+
+/* Data saver mode - reduces animations and effects */
+html.data-saver .animate-pulse,
+html.data-saver .animate-bounce,
+html.data-saver .animate-spin,
+html.data-saver .animate-spin-slow {
+  animation: none !important;
+}
+
+html.data-saver .chromatic-aberration::before,
+html.data-saver .chromatic-aberration::after {
+  display: none !important;
+}
+
+html.data-saver .bg-noise {
+  display: none !important;
+}
+
+html.data-saver .backdrop-blur-lg,
+html.data-saver .backdrop-blur-xl,
+html.data-saver .backdrop-blur-2xl {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 /* Lissage des polices pour un rendu premium */
 body {
   -webkit-font-smoothing: antialiased;

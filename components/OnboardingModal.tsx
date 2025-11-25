@@ -166,15 +166,15 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClose }) =>
                 {/* Footer Navigation */}
                 <div className="mt-auto flex flex-col items-center space-y-4">
                     {/* Dots */}
-                    <div className="flex gap-2" role="tablist">
+                    <div className="flex items-center gap-1.5" role="tablist">
                         {slides.map((_, idx) => (
                             <button
                                 key={idx}
                                 onClick={() => { if (!isAnimating) { hapticTap(); setCurrentSlide(idx); }}}
                                 role="tab"
                                 aria-selected={idx === currentSlide}
-                                className={`w-2 h-2 rounded-full transition-all ${
-                                    idx === currentSlide ? 'bg-white w-6' : 'bg-white/30'
+                                className={`h-1.5 rounded-full transition-all duration-200 ${
+                                    idx === currentSlide ? 'w-5 bg-white' : 'w-1.5 bg-white/30'
                                 }`}
                             />
                         ))}

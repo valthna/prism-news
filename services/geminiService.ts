@@ -802,8 +802,8 @@ const sortArticlesByRecency = (articles: NewsArticle[]): NewsArticle[] => {
 };
 
 /**
- * Récupère TOUS les articles de la base de données
- * Utilisé pour afficher l'ensemble du contenu disponible à l'utilisateur
+ * Récupère TOUS les articles de la base de données qui ont une image
+ * Un article sans image ne doit pas être affiché à l'utilisateur
  */
 const fetchAllArticlesFromDatabase = async (): Promise<NewsArticle[] | null> => {
   if (!isSupabaseActive()) {
@@ -814,10 +814,11 @@ const fetchAllArticlesFromDatabase = async (): Promise<NewsArticle[] | null> => 
   if (!client) return null;
 
   try {
-    console.log("[PRISM 🔄] Fetching ALL articles from database...");
+    console.log("[PRISM 🔄] Fetching articles WITH images from database...");
     const { data, error } = await client
       .from('news_tiles')
       .select('article')
+      .not('article->imageUrl', 'is', null)  // Seulement les articles avec imageUrl
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -829,14 +830,18 @@ const fetchAllArticlesFromDatabase = async (): Promise<NewsArticle[] | null> => 
     }
 
     if (!data || data.length === 0) {
-      console.log("[PRISM] No articles found in database");
+      console.log("[PRISM] No articles with images found in database");
       return null;
     }
 
-    const articles = data.map((row) => row.article as NewsArticle);
+    // Filtrer côté client aussi pour s'assurer que imageUrl est valide
+    const articles = data
+      .map((row) => row.article as NewsArticle)
+      .filter(a => a.imageUrl && a.imageUrl.trim() !== '');
+    
     // Tri par fraîcheur (publishedAt) - du plus récent au plus ancien
     const sortedArticles = sortArticlesByRecency(articles);
-    console.log(`[PRISM ✅] Retrieved ${sortedArticles.length} articles from database (sorted by recency)`);
+    console.log(`[PRISM ✅] Retrieved ${sortedArticles.length} articles with images from database (sorted by recency)`);
     return sortedArticles;
   } catch (error) {
     console.warn("[PRISM] Unexpected error fetching articles:", error);
@@ -1331,10 +1336,22 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
     return [];
   }
 
+  // Vérifier le cache local, mais si moins de 10 articles, aller chercher en base
   const localCachedArticles = getLocalCache(cacheKey);
-  if (!forceRefresh && localCachedArticles) {
-    console.log(`[PRISM] Local cache hit for key: ${cacheKey}`);
+  if (!forceRefresh && localCachedArticles && localCachedArticles.length >= 10) {
+    console.log(`[PRISM] Local cache hit for key: ${cacheKey} (${localCachedArticles.length} articles)`);
     return localCachedArticles;
+  }
+  
+  // Cache local insuffisant - chercher en base les articles avec images
+  if (!forceRefresh) {
+    console.log(`[PRISM 🔄] Local cache insufficient (${localCachedArticles?.length || 0} articles) - fetching from database...`);
+    const allWithImages = await fetchLatestArticlesFromDatabase();
+    if (allWithImages && allWithImages.length > 0) {
+      console.log(`[PRISM ✅] Loaded ${allWithImages.length} articles with images from database`);
+      saveLocalCache(cacheKey, allWithImages);
+      return allWithImages;
+    }
   }
 
   // await cleanupExpiredTiles();

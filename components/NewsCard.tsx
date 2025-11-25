@@ -381,7 +381,6 @@ const NewsCard: React.FC<NewsCardProps> = ({
       >
         {/* BACKGROUND (Unified logic) */}
         <div className="absolute inset-0 z-0">
-          <div className="absolute inset-0 bg-gray-900/40" />
           {!imageLoaded && (
             <div className="absolute inset-0 bg-gray-800 animate-pulse z-10">
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]"></div>
@@ -396,7 +395,6 @@ const NewsCard: React.FC<NewsCardProps> = ({
             onError={handleImageError}
             className={`absolute inset-0 w-full h-full object-cover lg:blur-[120px] lg:opacity-20 lg:scale-110 transition-opacity duration-[1500ms] ease-out ${imageLoaded ? 'opacity-100 lg:opacity-20' : 'opacity-0'}`}
           />
-          <div className="absolute inset-0 lg:bg-black/20 lg:backdrop-blur-[2px]" />
         </div>
 
         {/* MAIN CONTENT CONTAINER */}
@@ -419,7 +417,7 @@ const NewsCard: React.FC<NewsCardProps> = ({
                     <div className="relative pointer-events-auto" ref={mobileCategoryMenuRef}>
                       <button
                         onClick={() => setIsMobileCategoryMenuOpen(prev => !prev)}
-                        className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-black/40 border border-white/10 backdrop-blur-xl active:scale-95 transition-all group hover:bg-black/50"
+                        className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-[rgba(25,25,28,0.92)] border border-white/10 active:scale-95 transition-all group hover:bg-[rgba(35,35,38,0.95)]"
                         aria-label="Changer de catégorie"
                       >
                         <span className="text-lg leading-none filter drop-shadow-sm group-hover:scale-110 transition-transform">{article.emoji}</span>
@@ -464,7 +462,7 @@ const NewsCard: React.FC<NewsCardProps> = ({
                     <div className="relative pointer-events-auto">
                       <div
                         ref={mobileReliabilityTriggerRef}
-                        className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-black/40 border border-white/10 backdrop-blur-xl cursor-help active:scale-95 transition-all hover:bg-black/50 group"
+                        className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-[rgba(25,25,28,0.92)] border border-white/10 cursor-help active:scale-95 transition-all hover:bg-[rgba(35,35,38,0.95)] group"
                         onClick={(e) => { e.stopPropagation(); toggleMobileReliabilityInfo(); }}
                       >
                         <div className="flex flex-col items-end leading-none">
@@ -567,7 +565,7 @@ const NewsCard: React.FC<NewsCardProps> = ({
                 </div>
 
                 {/* TEXT CARD */}
-                <div className="glass-panel rounded-[24px] lg:rounded-[32px] px-6 pt-6 pb-4 lg:px-8 lg:pt-8 lg:pb-6 relative flex flex-col gap-2 bg-black/40 backdrop-blur-3xl overflow-hidden pointer-events-auto shrink-0">
+                <div className="glass-panel rounded-[24px] lg:rounded-[32px] px-6 pt-6 pb-4 lg:px-8 lg:pt-8 lg:pb-6 relative flex flex-col gap-2 overflow-hidden pointer-events-auto shrink-0">
                   
                   {/* Share Button - Top Right */}
                   <button

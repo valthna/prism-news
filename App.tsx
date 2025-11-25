@@ -619,7 +619,7 @@ const App: React.FC = () => {
                 <div className="pointer-events-auto flex items-center h-full gap-6">
                     <button
                         onClick={() => setIsOnboardingOpen(true)}
-                        className="h-11 px-5 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/50 backdrop-blur-xl border border-white/10 transition-all active:scale-95"
+                        className="h-11 px-5 flex items-center justify-center rounded-full bg-[rgba(25,25,28,0.92)] hover:bg-[rgba(35,35,38,0.95)] border border-white/10 transition-all active:scale-95"
                         aria-label="À propos de PRISM"
                     >
                         <span
@@ -641,7 +641,7 @@ const App: React.FC = () => {
                     <button
                         onClick={() => setIsSearchOpen(true)}
                         disabled={isSearchLoading}
-                        className="flex items-center justify-center w-11 h-11 rounded-full bg-black/40 hover:bg-black/50 backdrop-blur-xl border border-white/10 transition-all active:scale-95"
+                        className="flex items-center justify-center w-11 h-11 rounded-full bg-[rgba(25,25,28,0.92)] hover:bg-[rgba(35,35,38,0.95)] border border-white/10 transition-all active:scale-95"
                         aria-label="Rechercher"
                         aria-busy={isSearchLoading}
                     >
@@ -672,14 +672,14 @@ const App: React.FC = () => {
                     <button
                         onClick={handleRefresh}
                         disabled={isRefreshing}
-                        className="flex items-center justify-center w-11 h-11 rounded-full bg-black/40 hover:bg-black/50 backdrop-blur-xl border border-white/10 transition-all active:scale-95"
+                        className="flex items-center justify-center w-11 h-11 rounded-full bg-[rgba(25,25,28,0.92)] hover:bg-[rgba(35,35,38,0.95)] border border-white/10 transition-all active:scale-95"
                         aria-label="Actualiser les sujets"
                     >
                         <RefreshIcon className={`w-5 h-5 text-white/90 group-hover:text-white transition-colors ${isRefreshing ? 'animate-spin text-white' : 'group-hover:animate-spin'}`} strokeWidth={2} />
                     </button>
                     <button
                         onClick={() => setIsSettingsOpen(true)}
-                        className="flex items-center justify-center w-11 h-11 rounded-full bg-black/40 hover:bg-black/50 backdrop-blur-xl border border-white/10 transition-all active:scale-95 group"
+                        className="flex items-center justify-center w-11 h-11 rounded-full bg-[rgba(25,25,28,0.92)] hover:bg-[rgba(35,35,38,0.95)] border border-white/10 transition-all active:scale-95 group"
                         aria-label="Paramètres"
                     >
                         <SettingsIcon className="w-5 h-5 text-white/90 group-hover:text-white transition-colors group-hover:rotate-90 duration-500" strokeWidth={2} />

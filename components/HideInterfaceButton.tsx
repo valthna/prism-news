@@ -34,7 +34,7 @@ const HideInterfaceButton: React.FC<HideInterfaceButtonProps> = ({ isHidden, onP
             text-white/90
             lg:hidden
             border border-white/10
-            ${isHidden ? 'bg-white/20 text-white ring-1 ring-white/30' : 'bg-black/40 backdrop-blur-xl hover:bg-black/50'}
+            ${isHidden ? 'bg-white/20 text-white ring-1 ring-white/30' : 'bg-[rgba(25,25,28,0.92)] hover:bg-[rgba(35,35,38,0.95)]'}
       `}
             aria-label={isHidden ? "Relâcher pour afficher l'interface" : "Maintenir pour masquer l'interface"}
             style={{

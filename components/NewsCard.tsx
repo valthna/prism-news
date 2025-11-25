@@ -138,17 +138,39 @@ const NewsCard: React.FC<NewsCardProps> = ({
     [selectedCategory]
   );
 
+  // Image URL generation with multiple fallbacks
   const caricatureStyle = PRISM_PROMPTS.IMAGE_GENERATION.SHORT_STYLE;
-  const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(article.imagePrompt + caricatureStyle)}?width=1080&height=1440&nologo=true&model=flux-pro&enhance=true&safe=true&seed=${article.id}`;
+  
+  // Fallback images based on category for reliable loading
+  const categoryImages: Record<string, string> = {
+    politics: 'https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=800&h=1200&fit=crop', // Parliament
+    technology: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=1200&fit=crop', // Tech
+    business: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&h=1200&fit=crop', // Business
+    science: 'https://images.unsplash.com/photo-1507413245164-6160d8298b31?w=800&h=1200&fit=crop', // Science
+    health: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=800&h=1200&fit=crop', // Health
+    world: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&h=1200&fit=crop', // World/Globe
+    sports: 'https://images.unsplash.com/photo-1461896836934- voices-of-the-future?w=800&h=1200&fit=crop', // Sports
+    entertainment: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&h=1200&fit=crop', // Entertainment
+    default: 'https://images.unsplash.com/photo-1495020689067-958852a7765e?w=800&h=1200&fit=crop' // News default
+  };
+  
+  // Pollinations URL with simplified prompt for better reliability
+  const simplePrompt = article.imagePrompt?.split(',')[0] || 'news illustration'; // Use only first part of prompt
+  const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(simplePrompt)}?width=800&height=1200&nologo=true&seed=${article.id?.replace(/[^a-z0-9]/gi, '') || '42'}`;
+  
+  // Fallback URL based on article category
+  const fallbackUrl = categoryImages[article.category?.toLowerCase() || 'default'] || categoryImages.default;
 
   const initialSrc = (article.imageUrl && (article.imageUrl.startsWith('http') || article.imageUrl.startsWith('data:')))
     ? article.imageUrl
     : pollinationsUrl;
   const [imageSrc, setImageSrc] = useState<string>(initialSrc);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [fallbackAttempt, setFallbackAttempt] = useState(0);
 
   useEffect(() => {
     setImageLoaded(false);
+    setFallbackAttempt(0);
     setImageSrc(initialSrc);
   }, [initialSrc]);
 
@@ -249,9 +271,17 @@ const NewsCard: React.FC<NewsCardProps> = ({
   }, [article.id, onVisible]);
   
   const handleImageError = () => {
-    if (imageSrc !== pollinationsUrl) {
+    // Progressive fallback system
+    if (fallbackAttempt === 0) {
+      // First fallback: try Pollinations with simplified prompt
+      setFallbackAttempt(1);
       setImageSrc(pollinationsUrl);
+    } else if (fallbackAttempt === 1) {
+      // Second fallback: use category-based Unsplash image
+      setFallbackAttempt(2);
+      setImageSrc(fallbackUrl);
     }
+    // After fallbackAttempt 2, keep the fallback URL (Unsplash should always work)
   };
 
   const handleShareArticle = useCallback(async () => {
@@ -649,12 +679,19 @@ const NewsCard: React.FC<NewsCardProps> = ({
               </div>
 
               {/* RIGHT COLUMN (IMAGE CARD) - Desktop only */}
-              <div className="hidden lg:flex w-[400px] lg:w-[480px] shrink-0 rounded-[32px] overflow-hidden shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] border border-white/10 group transform transition-all duration-700 hover:scale-[1.01] relative h-auto">
+              <div className="hidden lg:flex w-[400px] lg:w-[480px] shrink-0 rounded-[32px] overflow-hidden shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] border border-white/10 group transform transition-all duration-700 hover:scale-[1.01] relative aspect-[3/4] min-h-[400px]">
                 <img
                   src={imageSrc}
                   alt="Article Poster"
-                  className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-1000 group-hover:scale-105"
+                  onLoad={() => setImageLoaded(true)}
+                  onError={handleImageError}
+                  className={`absolute inset-0 w-full h-full object-cover object-top transition-all duration-1000 group-hover:scale-105 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
                 />
+                {!imageLoaded && (
+                  <div className="absolute inset-0 bg-gray-800 animate-pulse">
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]"></div>
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-40"></div>
               </div>
 

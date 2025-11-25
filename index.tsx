@@ -1,9 +1,20 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
-import { Analytics } from '@vercel/analytics/react';
-import { SpeedInsights } from '@vercel/speed-insights/react';
 import { SettingsProvider } from './contexts/SettingsContext';
 import App from './App';
+
+// Lazy load Vercel analytics to prevent errors when blocked by adblockers
+const Analytics = lazy(() => 
+  import('@vercel/analytics/react')
+    .then(mod => ({ default: mod.Analytics }))
+    .catch(() => ({ default: () => null }))
+);
+
+const SpeedInsights = lazy(() => 
+  import('@vercel/speed-insights/react')
+    .then(mod => ({ default: mod.SpeedInsights }))
+    .catch(() => ({ default: () => null }))
+);
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -16,7 +27,9 @@ root.render(
     <SettingsProvider>
       <App />
     </SettingsProvider>
-    <Analytics />
-    <SpeedInsights />
+    <Suspense fallback={null}>
+      <Analytics />
+      <SpeedInsights />
+    </Suspense>
   </React.StrictMode>
 );

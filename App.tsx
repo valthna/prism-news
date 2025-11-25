@@ -515,6 +515,16 @@ const App: React.FC = () => {
     }, [startLoadingProgress, animateCompletion, cleanupProgressTimer, cancelCompletionAnimation, scrollToTop]);
 
     const hasFetchedRef = useRef(false);
+    const pendingScrollToArticleRef = useRef<string | null>(null);
+
+    // Détecter l'ID d'article dans l'URL au chargement
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const articleId = urlParams.get('article');
+        if (articleId) {
+            pendingScrollToArticleRef.current = articleId;
+        }
+    }, []);
 
     useEffect(() => {
         if (hasFetchedRef.current) {
@@ -523,6 +533,37 @@ const App: React.FC = () => {
         hasFetchedRef.current = true;
         getArticles();
     }, [getArticles]);
+
+    // Défiler vers l'article partagé une fois les articles chargés
+    useEffect(() => {
+        if (!pendingScrollToArticleRef.current || articles.length === 0 || loading) {
+            return;
+        }
+
+        const targetArticleId = pendingScrollToArticleRef.current;
+        const targetIndex = articles.findIndex(a => a.id === targetArticleId);
+        
+        if (targetIndex !== -1) {
+            // Attendre que le DOM soit prêt avant de défiler
+            requestAnimationFrame(() => {
+                if (scrollContainerRef.current) {
+                    const cardHeight = window.innerHeight;
+                    scrollContainerRef.current.scrollTo({
+                        top: targetIndex * cardHeight,
+                        behavior: 'instant'
+                    });
+                    setActiveArticleIndex(targetIndex);
+                }
+            });
+            
+            // Nettoyer l'URL pour éviter de défiler à nouveau lors d'un refresh
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.delete('article');
+            window.history.replaceState({}, '', newUrl.toString());
+            
+            pendingScrollToArticleRef.current = null;
+        }
+    }, [articles, loading]);
 
     const handleSearch = useCallback((query: string, category: string) => {
         const normalizedQuery = query.trim();
@@ -577,17 +618,21 @@ const App: React.FC = () => {
     const handleShare = async () => {
         if (!activeArticle) return;
 
+        // Construire l'URL avec l'ID de l'article pour un lien direct
+        const shareUrl = new URL(window.location.href);
+        shareUrl.searchParams.set('article', activeArticle.id);
+
         const shareData = {
             title: activeArticle.headline,
             text: `${activeArticle.headline}\n\n${activeArticle.summary}\n\nvia PRISM AI News`,
-            url: window.location.href
+            url: shareUrl.toString()
         };
 
         try {
             if (navigator.share) {
                 await navigator.share(shareData);
             } else {
-                await navigator.clipboard.writeText(`${shareData.title}\n${shareData.text}`);
+                await navigator.clipboard.writeText(`${shareData.title}\n${shareData.text}\n${shareData.url}`);
                 // Could add a toast here
             }
         } catch (err) {

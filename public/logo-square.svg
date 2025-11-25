@@ -1,39 +1,83 @@
-<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img"
-  aria-labelledby="title desc">
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">PRISM - L'Actu Spectrale</title>
   <desc id="desc">Logo PRISM avec effet glitch cyan et rouge sur fond noir.</desc>
+  
   <defs>
-    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#20D5FF" />
-      <stop offset="1" stop-color="#FF4D6D" />
-    </linearGradient>
-    <filter id="blur-glow" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="blur" />
+    <radialGradient id="bg-glow" cx="50%" cy="50%" r="80%" fx="50%" fy="50%">
+      <stop offset="0%" stop-color="#15152a" />
+      <stop offset="60%" stop-color="#0a0a14" />
+      <stop offset="100%" stop-color="#050505" />
+    </radialGradient>
+    
+    <!-- Glow effect pour le texte -->
+    <filter id="text-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="8" result="blur"/>
+      <feFlood flood-color="#FFFFFF" flood-opacity="0.3"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- Glow rouge pour la barre -->
+    <filter id="red-glow" x="-100%" y="-50%" width="300%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+      <feFlood flood-color="#FF3B58" flood-opacity="0.6"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
     </filter>
   </defs>
-
-  <rect width="512" height="512" rx="64" ry="64" fill="#050505" />
-  <rect x="128" y="356" width="256" height="6" rx="3" fill="url(#glow)" opacity="0.45" />
-
-  <g transform="translate(256 238) scale(0.62)">
-    <g transform="skewX(-12)">
-      <text x="0" y="0" text-anchor="middle" font-family="'Outfit', 'Space Mono', sans-serif" font-size="190"
-        font-weight="800" letter-spacing="8">
-        <tspan fill="#12E4FF" dx="-10">PRISM</tspan>
-      </text>
-      <text x="0" y="0" text-anchor="middle" font-family="'Outfit', 'Space Mono', sans-serif" font-size="190"
-        font-weight="800" letter-spacing="8">
-        <tspan fill="#FF3B58" dx="18">PRISM</tspan>
-      </text>
-      <text x="0" y="0" text-anchor="middle" font-family="'Outfit', 'Space Mono', sans-serif" font-size="190"
-        font-weight="900" letter-spacing="8" fill="#FFFFFF" paint-order="stroke">
-        PRISM
-      </text>
-    </g>
+  
+  <!-- Fond noir avec dégradé subtil -->
+  <rect width="512" height="512" rx="64" ry="64" fill="url(#bg-glow)" />
+  
+  <!-- Particules décoratives (petits éléments flottants) -->
+  <g opacity="0.4">
+    <!-- Haut gauche -->
+    <rect x="85" y="95" width="22" height="28" rx="3" fill="#2a2a40" transform="rotate(-15, 96, 109)" />
+    <rect x="88" y="100" width="16" height="2" rx="1" fill="#4a4a60" transform="rotate(-15, 96, 101)" />
+    <rect x="88" y="105" width="12" height="2" rx="1" fill="#4a4a60" transform="rotate(-15, 96, 106)" />
+    
+    <!-- Haut droite -->
+    <rect x="395" y="115" width="20" height="26" rx="3" fill="#3a3a50" transform="rotate(20, 405, 128)" />
+    <rect x="398" y="120" width="14" height="2" rx="1" fill="#5a5a70" transform="rotate(20, 405, 121)" />
+    
+    <!-- Bas droite -->
+    <rect x="410" y="340" width="18" height="24" rx="3" fill="#2a2a40" transform="rotate(-25, 419, 352)" />
+    
+    <!-- Bas gauche -->
+    <rect x="75" y="360" width="16" height="20" rx="2" fill="#3a3a50" transform="rotate(10, 83, 370)" />
   </g>
-
-  <g opacity="0.35" filter="url(#blur-glow)" transform="translate(256 238) scale(0.62)">
-    <text x="0" y="0" text-anchor="middle" font-family="'Outfit', 'Space Mono', sans-serif" font-size="182"
-      font-weight="700" fill="url(#glow)" letter-spacing="8" transform="skewX(-12)">PRISM</text>
+  
+  <!-- Points lumineux (étoiles/particules) -->
+  <g fill="#FFFFFF">
+    <circle cx="180" cy="160" r="1.5" opacity="0.6" />
+    <circle cx="340" cy="180" r="1" opacity="0.4" />
+    <circle cx="420" cy="280" r="1.2" opacity="0.5" />
+    <circle cx="100" cy="300" r="0.8" opacity="0.3" />
+    <circle cx="280" cy="400" r="1" opacity="0.4" />
+    <circle cx="150" cy="380" r="0.6" opacity="0.3" />
+  </g>
+  
+  <!-- Groupe logo principal centré -->
+  <g transform="translate(256 268)">
+    <!-- Barre rouge verticale à gauche avec glow -->
+    <rect x="-175" y="-65" width="18" height="100" fill="#FF3B58" rx="4" filter="url(#red-glow)" />
+    
+    <!-- Texte avec effet glitch -->
+    <g transform="skewX(-12)" filter="url(#text-glow)">
+      <!-- Calque cyan (décalé gauche) -->
+      <text x="15" y="0" text-anchor="middle" font-family="'Outfit', 'Arial Black', sans-serif" font-size="145" font-weight="800" letter-spacing="8" fill="#12E4FF" transform="translate(-10, 0)">PRISM</text>
+      
+      <!-- Calque rouge (décalé droite) -->
+      <text x="15" y="0" text-anchor="middle" font-family="'Outfit', 'Arial Black', sans-serif" font-size="145" font-weight="800" letter-spacing="8" fill="#FF3B58" transform="translate(10, 0)">PRISM</text>
+      
+      <!-- Calque blanc principal -->
+      <text x="15" y="0" text-anchor="middle" font-family="'Outfit', 'Arial Black', sans-serif" font-size="145" font-weight="900" letter-spacing="8" fill="#FFFFFF">PRISM</text>
+    </g>
   </g>
 </svg>

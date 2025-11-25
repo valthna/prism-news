@@ -1,14 +1,29 @@
-<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img"
-  aria-label="PRISM">
-  <rect width="128" height="128" rx="24" ry="24" fill="#050505" />
-  <g transform="translate(64 70) scale(0.5)">
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="PRISM">
+  <defs>
+    <radialGradient id="bg-glow" cx="50%" cy="50%" r="70%" fx="50%" fy="50%">
+      <stop offset="0%" stop-color="#1a1a2e" />
+      <stop offset="100%" stop-color="#050505" />
+    </radialGradient>
+  </defs>
+  
+  <!-- Fond noir avec léger dégradé -->
+  <rect width="128" height="128" rx="24" ry="24" fill="url(#bg-glow)" />
+  
+  <!-- Groupe logo centré -->
+  <g transform="translate(64 68)">
+    <!-- Barre rouge verticale à gauche -->
+    <rect x="-46" y="-18" width="5" height="28" fill="#FF3B58" rx="1" />
+    
+    <!-- Texte avec effet glitch -->
     <g transform="skewX(-12)">
-      <text x="0" y="0" text-anchor="middle" font-family="'Outfit', 'Space Mono', sans-serif" font-size="90"
-        font-weight="800" letter-spacing="4" fill="#12E4FF" transform="translate(-4, 0)">PRISM</text>
-      <text x="0" y="0" text-anchor="middle" font-family="'Outfit', 'Space Mono', sans-serif" font-size="90"
-        font-weight="800" letter-spacing="4" fill="#FF3B58" transform="translate(6, 0)">PRISM</text>
-      <text x="0" y="0" text-anchor="middle" font-family="'Outfit', 'Space Mono', sans-serif" font-size="90"
-        font-weight="900" letter-spacing="4" fill="#FFFFFF">PRISM</text>
+      <!-- Calque cyan (décalé gauche) -->
+      <text x="4" y="0" text-anchor="middle" font-family="'Outfit', 'Arial Black', sans-serif" font-size="38" font-weight="800" letter-spacing="2" fill="#12E4FF" transform="translate(-3, 0)">PRISM</text>
+      
+      <!-- Calque rouge (décalé droite) -->
+      <text x="4" y="0" text-anchor="middle" font-family="'Outfit', 'Arial Black', sans-serif" font-size="38" font-weight="800" letter-spacing="2" fill="#FF3B58" transform="translate(3, 0)">PRISM</text>
+      
+      <!-- Calque blanc principal -->
+      <text x="4" y="0" text-anchor="middle" font-family="'Outfit', 'Arial Black', sans-serif" font-size="38" font-weight="900" letter-spacing="2" fill="#FFFFFF">PRISM</text>
     </g>
   </g>
 </svg>

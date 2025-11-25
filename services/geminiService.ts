@@ -137,14 +137,112 @@ const sanitizeBias = (bias?: string): Bias => {
 const normalizeSourceName = (name: string): string =>
   name.toLowerCase().trim();
 
+// Map des noms de sources connus vers leurs vrais domaines
+const KNOWN_DOMAIN_ALIASES: Record<string, string> = {
+  // Reuters variants
+  'reuters': 'reuters.com',
+  'reuterstech': 'reuters.com',
+  'reutersbusiness': 'reuters.com',
+  'reutersnews': 'reuters.com',
+  // BBC variants
+  'bbc': 'bbc.com',
+  'bbcnews': 'bbc.com',
+  'bbctech': 'bbc.com',
+  'bbcinnovation': 'bbc.com',
+  'bbcbusiness': 'bbc.com',
+  // NBC variants
+  'nbc': 'nbcnews.com',
+  'nbcnews': 'nbcnews.com',
+  'nbctech': 'nbcnews.com',
+  'nbcbusiness': 'nbcnews.com',
+  // CNN variants
+  'cnn': 'cnn.com',
+  'cnntech': 'cnn.com',
+  'cnnbusiness': 'cnn.com',
+  // MIT variants
+  'mittechreview': 'technologyreview.com',
+  'mittech': 'technologyreview.com',
+  'technologyreview': 'technologyreview.com',
+  // Le Monde variants
+  'lemonde': 'lemonde.fr',
+  'lemondetech': 'lemonde.fr',
+  // Guardian variants
+  'guardian': 'theguardian.com',
+  'theguardian': 'theguardian.com',
+  'guardiannews': 'theguardian.com',
+  // AFP variants
+  'afp': 'afp.com',
+  'afpnews': 'afp.com',
+  // WSJ variants
+  'wsj': 'wsj.com',
+  'wallstreetjournal': 'wsj.com',
+  // NYT variants
+  'nyt': 'nytimes.com',
+  'nytimes': 'nytimes.com',
+  'newyorktimes': 'nytimes.com',
+  // Other common sources
+  'figaro': 'lefigaro.fr',
+  'lefigaro': 'lefigaro.fr',
+  'lesechos': 'lesechos.fr',
+  'liberation': 'liberation.fr',
+  'mediapart': 'mediapart.fr',
+  'politico': 'politico.eu',
+  'axios': 'axios.com',
+  'economist': 'economist.com',
+  'theeconomist': 'economist.com',
+  'foxnews': 'foxnews.com',
+  'fox': 'foxnews.com',
+  'nypost': 'nypost.com',
+  'apnews': 'apnews.com',
+  'ap': 'apnews.com',
+  'associatedpress': 'apnews.com',
+  'vox': 'vox.com',
+  'humanite': 'humanite.fr',
+  'lhumanite': 'humanite.fr',
+  'who': 'who.int',
+  'worldbank': 'worldbank.org',
+  'oecd': 'oecd.org',
+  'un': 'un.org',
+};
+
 const createLogoUrl = (rawName: string): string => {
-  const normalized = rawName.toLowerCase().replace(/\s+/g, '');
+  const normalized = rawName.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9.]/g, '');
   if (!normalized) {
     return 'https://www.google.com/s2/favicons?domain=reuters.com&sz=128';
   }
-  const domain = normalized.includes('.') ? normalized : `${normalized}.com`;
-  // Google Favicons est moins susceptible d'être bloqué par les ad blockers
-  return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+  
+  // Si c'est déjà un domaine valide avec extension
+  if (normalized.includes('.')) {
+    return `https://www.google.com/s2/favicons?domain=${normalized}&sz=128`;
+  }
+  
+  // Chercher dans les alias connus
+  const knownDomain = KNOWN_DOMAIN_ALIASES[normalized];
+  if (knownDomain) {
+    return `https://www.google.com/s2/favicons?domain=${knownDomain}&sz=128`;
+  }
+  
+  // Chercher une correspondance partielle (ex: "reuterstech" contient "reuters")
+  for (const [alias, domain] of Object.entries(KNOWN_DOMAIN_ALIASES)) {
+    if (normalized.includes(alias) || alias.includes(normalized)) {
+      return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+    }
+  }
+  
+  // Chercher dans le pool de sources curées
+  const allCuratedDomains = Object.values(curatedSourcePool)
+    .flat()
+    .map(s => s.name);
+  
+  for (const domain of allCuratedDomains) {
+    const domainBase = domain.split('.')[0];
+    if (normalized.includes(domainBase) || domainBase.includes(normalized)) {
+      return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+    }
+  }
+  
+  // Fallback: ajouter .com (peut ne pas exister mais au moins on essaie)
+  return `https://www.google.com/s2/favicons?domain=${normalized}.com&sz=128`;
 };
 
 const createGoogleSearchUrl = (headline: string, sourceName: string): string =>
@@ -387,6 +485,13 @@ const performFirecrawlDiscovery = async (query: string | undefined, category: st
   const apiKey = resolveFirecrawlKey();
   if (!apiKey) {
     console.warn("[PRISM ⚠️] No Firecrawl API Key found.");
+    // Skip firecrawl phases - jump to gemini directly
+    progressTracker.emit({
+      phase: 'gemini_start',
+      progress: 40,
+      message: 'Connexion IA',
+      detail: 'Firecrawl non disponible, connexion directe à Gemini...'
+    });
     return null;
   }
 
@@ -394,7 +499,7 @@ const performFirecrawlDiscovery = async (query: string | undefined, category: st
     phase: 'firecrawl_start',
     progress: 5,
     message: 'Scan Sources Mondiales',
-    detail: 'Lancement de la collecte parallèle...'
+    detail: 'Lancement de la collecte parallèle sur 5 vecteurs...'
   });
 
   console.log("[PRISM 🕷️] Firecrawl active - Engaging 'Massive Parallel Harvest'...");
@@ -413,13 +518,14 @@ const performFirecrawlDiscovery = async (query: string | undefined, category: st
 
   try {
     const executeVectorSearch = async (vectorName: string, searchQuery: string, vectorEmoji: string, vectorIndex: number) => {
-      const progressBase = 10 + (vectorIndex * 10); // 10, 20, 30, 40, 50
+      // Progression répartie sur 5-35% (30% pour Firecrawl)
+      const progressBase = 5 + (vectorIndex * 6); // 5, 11, 17, 23, 29
 
       progressTracker.emit({
         phase: 'firecrawl_vector',
         progress: progressBase,
         message: 'Scan Sources Mondiales',
-        detail: `${vectorEmoji} Vecteur ${vectorName} en cours...`,
+        detail: `${vectorEmoji} Vecteur ${vectorName} (${vectorIndex + 1}/5)...`,
         metadata: { vectorName }
       });
 
@@ -511,7 +617,7 @@ ${item.markdown ? item.markdown.slice(0, 1200).replace(/\n+/g, ' ') : 'No conten
 
     progressTracker.emit({
       phase: 'firecrawl_complete',
-      progress: 60,
+      progress: 38,
       message: 'Agrégation Données',
       detail: `${totalSources} sources collectées et consolidées`,
       metadata: { sourcesFound: totalSources }
@@ -804,6 +910,7 @@ const sortArticlesByRecency = (articles: NewsArticle[]): NewsArticle[] => {
 
 /**
  * Récupère TOUS les articles de la base de données qui ont une image
+ * Triés par date de génération (created_at) - les plus récents en premier
  * Un article sans image ne doit pas être affiché à l'utilisateur
  */
 const fetchAllArticlesFromDatabase = async (): Promise<NewsArticle[] | null> => {
@@ -815,12 +922,12 @@ const fetchAllArticlesFromDatabase = async (): Promise<NewsArticle[] | null> => 
   if (!client) return null;
 
   try {
-    console.log("[PRISM 🔄] Fetching articles WITH images from database...");
+    console.log("[PRISM 🔄] Fetching ALL articles WITH images from database...");
     const { data, error } = await client
       .from('news_tiles')
-      .select('article')
+      .select('article, created_at')
       .not('article->imageUrl', 'is', null)  // Seulement les articles avec imageUrl
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }); // Plus récent en premier, pas de limite
 
     if (error) {
       console.warn("[PRISM] Failed to fetch articles:", error);
@@ -835,15 +942,15 @@ const fetchAllArticlesFromDatabase = async (): Promise<NewsArticle[] | null> => 
       return null;
     }
 
-    // Filtrer côté client aussi pour s'assurer que imageUrl est valide
+    // Filtrer côté client pour s'assurer que imageUrl est valide et non vide
     const articles = data
       .map((row) => row.article as NewsArticle)
       .filter(a => a.imageUrl && a.imageUrl.trim() !== '');
     
-    // Tri par fraîcheur (publishedAt) - du plus récent au plus ancien
-    const sortedArticles = sortArticlesByRecency(articles);
-    console.log(`[PRISM ✅] Retrieved ${sortedArticles.length} articles with images from database (sorted by recency)`);
-    return sortedArticles;
+    // Les articles sont déjà triés par created_at (date de génération)
+    // Plus récent en haut, plus ancien en bas
+    console.log(`[PRISM ✅] Retrieved ${articles.length} articles with images from database (newest first)`);
+    return articles;
   } catch (error) {
     console.warn("[PRISM] Unexpected error fetching articles:", error);
     if (isNetworkFailure(error)) {
@@ -1337,100 +1444,64 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
     return [];
   }
 
-  // Vérifier le cache local, mais si moins de 10 articles, aller chercher en base
-  const localCachedArticles = getLocalCache(cacheKey);
-  if (!forceRefresh && localCachedArticles && localCachedArticles.length >= 10) {
-    console.log(`[PRISM] Local cache hit for key: ${cacheKey} (${localCachedArticles.length} articles)`);
-    return localCachedArticles;
-  }
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STRATÉGIE : La BASE DE DONNÉES est la source de vérité, pas le cache local
+  // Le cache local sert uniquement de fallback si la base est inaccessible
+  // Cela garantit que tous les users voient les mêmes articles, dans le même ordre
+  // ═══════════════════════════════════════════════════════════════════════════
   
-  // Cache local insuffisant - chercher en base les articles avec images
   if (!forceRefresh) {
-    console.log(`[PRISM 🔄] Local cache insufficient (${localCachedArticles?.length || 0} articles) - fetching from database...`);
-    const allWithImages = await fetchLatestArticlesFromDatabase();
-    if (allWithImages && allWithImages.length > 0) {
-      console.log(`[PRISM ✅] Loaded ${allWithImages.length} articles with images from database`);
-      saveLocalCache(cacheKey, allWithImages);
-      return allWithImages;
+    // 1. TOUJOURS essayer d'abord la base de données (source de vérité)
+    console.log(`[PRISM 🔄] Fetching latest articles from database (source of truth)...`);
+    const dbArticles = await fetchLatestArticlesFromDatabase();
+    
+    if (dbArticles && dbArticles.length > 0) {
+      console.log(`[PRISM ✅] Database returned ${dbArticles.length} articles with images`);
+      saveLocalCache(cacheKey, dbArticles); // Mettre à jour le cache local
+      return dbArticles;
     }
+    
+    // 2. FALLBACK: Si la base est inaccessible, utiliser le cache local
+    const localCachedArticles = getLocalCache(cacheKey, { allowStale: true });
+    if (localCachedArticles && localCachedArticles.length > 0) {
+      console.log(`[PRISM ⚠️] Database unavailable, using local cache (${localCachedArticles.length} articles)`);
+      return localCachedArticles;
+    }
+    
+    // 3. Aucune donnée disponible
+    console.warn(`[PRISM ⚠️] No articles available (database and cache both empty)`);
+    return [];
   }
 
-  // await cleanupExpiredTiles();
-  // Exécution en arrière-plan pour ne pas bloquer le chargement initial
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DEEP HARVEST : Uniquement déclenché par forceRefresh (bouton Actualiser)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // Nettoyage en arrière-plan
   cleanupExpiredTiles().catch(e => console.warn("[PRISM] Background cleanup warning:", e));
+
+  // Vérifier le rate limit avant de lancer Deep Harvest
+  if (Date.now() - lastRateLimitHit < RATE_LIMIT_COOLDOWN_MS) {
+    console.warn(`[PRISM] Gemini cooldown active. Returning cached articles instead.`);
+    const dbFallback = await fetchLatestArticlesFromDatabase();
+    if (dbFallback && dbFallback.length > 0) {
+      return dbFallback;
+    }
+    const staleLocal = getLocalCache(cacheKey, { allowStale: true });
+    if (staleLocal) {
+      return staleLocal;
+    }
+    return [];
+  }
 
   try {
     const apiKey = resolveApiKey();
     console.log("[PRISM] Checking API Key:", apiKey ? "Present" : "Missing");
-    // Check for API Key inside the try block to allow fallback to mocks
     if (!apiKey) {
-      throw new Error("API_KEY environment variable is not set. Switching to mock data.");
+      throw new Error("API_KEY environment variable is not set.");
     }
 
-    // Timeout court pour le cache Supabase (5s) afin d'éviter le blocage
-    let supabaseCached = null;
-    if (!forceRefresh) {
-        supabaseCached = await withTimeout(
-          fetchSupabaseCache(cacheKey, SUPABASE_CACHE_TTL_MS), 
-          5000, 
-          () => console.warn("[PRISM] Supabase cache check timed out")
-        ).catch(err => {
-          console.warn("[PRISM] Skipping Supabase cache due to error/timeout:", err);
-          return null;
-        });
-    }
-
-    if (supabaseCached) {
-      saveLocalCache(cacheKey, supabaseCached);
-      return supabaseCached;
-    }
-
-    let repositoryTiles = null;
-    if (!forceRefresh) {
-        repositoryTiles = await withTimeout(
-          fetchTilesFromRepository(cacheKey),
-          5000, 
-          () => console.warn("[PRISM] Repository check timed out")
-        ).catch(err => {
-          console.warn("[PRISM] Skipping repository tiles due to error/timeout:", err);
-          return null;
-        });
-    }
-
-    if (repositoryTiles) {
-      saveLocalCache(cacheKey, repositoryTiles);
-      return repositoryTiles;
-    }
-
-    if (Date.now() - lastRateLimitHit < RATE_LIMIT_COOLDOWN_MS) {
-      console.warn(`[PRISM] Gemini cooldown active for key: ${cacheKey}. Serving stale cache.`);
-      const staleLocal = getLocalCache(cacheKey, { allowStale: true });
-      if (staleLocal) {
-        return staleLocal;
-      }
-      const staleSupabase = await fetchSupabaseCache(cacheKey, SUPABASE_CACHE_TTL_MS * 2);
-      if (staleSupabase) {
-        saveLocalCache(cacheKey, staleSupabase);
-        return staleSupabase;
-      }
-    }
-
-    // --- DEEP HARVEST UNIQUEMENT SUR REFRESH MANUEL ---
-    // Si pas de forceRefresh, on retourne les derniers articles de la BDD au lieu de lancer le Deep Harvest
-    if (!forceRefresh) {
-      console.log(`[PRISM 🔄] Cache miss but no forceRefresh - fetching latest articles from database...`);
-      const latestFromDb = await fetchLatestArticlesFromDatabase();
-      if (latestFromDb && latestFromDb.length > 0) {
-        console.log(`[PRISM ✅] Returning ${latestFromDb.length} cached articles from database (no Deep Harvest)`);
-        saveLocalCache(cacheKey, latestFromDb);
-        return latestFromDb;
-      }
-      // Si vraiment rien en base, on retourne un tableau vide
-      console.warn(`[PRISM ⚠️] No articles in database and no forceRefresh - returning empty array`);
-      return [];
-    }
-
-    console.log(`[PRISM 🧠] Cache NOT FOUND for key: ${cacheKey}. forceRefresh=true → Engaging Deep Harvest protocol...`);
+    console.log(`[PRISM 🧠] forceRefresh=true → Engaging Deep Harvest protocol...`);
 
     progressTracker.emit({
       phase: 'init',
@@ -1485,15 +1556,37 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
       ];
 
       for (const modelName of modelsToTry) {
-        console.log(`[PRISM 🤖] Attempting generation with model: ${modelName}...`);
+        const modelIndex = modelsToTry.indexOf(modelName);
+        const isThinkingModel = modelName.includes("gemini-3");
+        console.log(`[PRISM 🤖] Attempting generation with model: ${modelName}... (${modelIndex + 1}/${modelsToTry.length})`);
 
+        // Progression initiale pour ce modèle (45-75% réparti sur les tentatives)
+        const baseProgress = 45 + (modelIndex * 6);
+        
         progressTracker.emit({
           phase: 'gemini_generating',
-          progress: 65 + (modelsToTry.indexOf(modelName) * 5),
+          progress: baseProgress,
           message: 'Détection Biais',
-          detail: `IA Gemini (${modelName}) analyse les sources...`,
-          metadata: { currentModel: modelName }
+          detail: `Connexion à ${modelName}...`,
+          metadata: { 
+            currentModel: modelName,
+            attemptNumber: modelIndex + 1,
+            totalAttempts: modelsToTry.length
+          }
         });
+
+        // Démarrer le heartbeat pour cette phase longue
+        progressTracker.startHeartbeat(
+          isThinkingModel ? 'gemini_thinking' : 'gemini_generating',
+          {
+            intervalMs: 5000,
+            baseProgress: baseProgress,
+            maxProgress: isThinkingModel ? 84 : 74,
+            message: isThinkingModel ? 'Analyse Approfondie' : 'Détection Biais',
+            detail: `${modelName} analyse les sources`,
+            metadata: { currentModel: modelName }
+          }
+        );
         try {
           const startTime = Date.now();
           
@@ -1514,7 +1607,7 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
           if (isThinkingModel) {
             // Selon la doc Google, un niveau MEDIUM accélère la latence sans perdre la fiabilité
             generationConfig.thinkingConfig = {
-                thinkingLevel: "MEDIUM"
+                thinkingLevel: "LOW"
             };
           }
 
@@ -1528,17 +1621,24 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
             () => console.warn(`[PRISM ⏳] Timeout warning for ${modelName} après ${modelTimeoutMs / 1000}s`)
           );
 
-          console.log(`[PRISM 🤖] Success with ${modelName} in ${(Date.now() - startTime) / 1000}s`);
+          // Arrêter le heartbeat - succès!
+          progressTracker.stopHeartbeat();
+          
+          const elapsedSec = (Date.now() - startTime) / 1000;
+          console.log(`[PRISM 🤖] Success with ${modelName} in ${elapsedSec.toFixed(1)}s`);
 
           progressTracker.emit({
             phase: 'gemini_parsing',
-            progress: 82,
+            progress: 85,
             message: 'Génération Synthèse',
-            detail: 'Analyse terminée, traitement des données...',
+            detail: `Analyse terminée en ${elapsedSec.toFixed(0)}s, traitement des données...`,
             metadata: { currentModel: modelName }
           });
           return { result, model: modelName }; // Succès, on retourne le résultat
         } catch (error: any) {
+          // Arrêter le heartbeat avant de changer de modèle ou d'échouer
+          progressTracker.stopHeartbeat();
+          
           const isModelError = error.message?.includes('404') || error.message?.includes('not found') || error.status === 404;
           if (isModelError) {
             console.warn(`[PRISM ⚠️] Model ${modelName} not found. Trying next...`);
@@ -1552,6 +1652,8 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
           throw error;
         }
       }
+      // Tous les modèles ont échoué
+      progressTracker.stopHeartbeat();
       throw new Error("All Gemini models failed to respond.");
     };
 
@@ -1721,23 +1823,70 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
     const canGenerateHostedImages = isImagenServiceEnabled() && isSupabaseActive();
     if (canGenerateHostedImages) {
       const imagenService = getImagenService();
-      const articlesWithImages: NewsArticle[] = [];
+      const totalImages = preparedArticles.length;
       
-      for (const article of preparedArticles) {
-        if (articlesWithImages.length > 0) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
+      progressTracker.emit({
+        phase: 'image_generation',
+        progress: 88,
+        message: 'Création Visuels',
+        detail: `Génération parallèle de ${totalImages} illustrations...`,
+        metadata: { imagesGenerated: 0, totalImages }
+      });
+      
+      // Compteur pour la progression
+      let completedImages = 0;
+      
+      // Générer TOUTES les images en parallèle
+      const imagePromises = preparedArticles.map(async (article) => {
+        try {
+          const imageUrl = await imagenService.generateCaricature({
+            prompt: article.imagePrompt,
+            aspectRatio: "3:4",
+            id: article.id,
+            requireHostedImage: true,
+          });
+          
+          completedImages++;
+          const imageProgress = 88 + ((completedImages / totalImages) * 9);
+          progressTracker.emit({
+            phase: 'image_generation',
+            progress: Math.round(imageProgress),
+            message: 'Création Visuels',
+            detail: `${completedImages}/${totalImages} images générées`,
+            metadata: { imagesGenerated: completedImages, totalImages }
+          });
+          
+          return { ...article, imageUrl };
+        } catch (error) {
+          console.warn(`[PRISM] Image generation failed for ${article.id}:`, error);
+          completedImages++;
+          // Retourner null pour filtrer cet article ensuite
+          return null;
         }
-
-        const imageUrl = await imagenService.generateCaricature({
-          prompt: article.imagePrompt,
-          aspectRatio: "3:4",
-          id: article.id,
-          requireHostedImage: true,
-        });
-        articlesWithImages.push({ ...article, imageUrl });
-      }
-      articlesToPersist = articlesWithImages;
+      });
+      
+      // Attendre que toutes les images soient générées
+      const allResults = await Promise.all(imagePromises);
+      
+      // Filtrer les articles sans image (échecs de génération)
+      const articlesWithImages = allResults.filter((article) => 
+        article !== null && article.imageUrl && article.imageUrl !== ''
+      ) as NewsArticle[];
+      
+      // Trier par récence (plus récent en premier)
+      const sortedArticles = sortArticlesByRecency(articlesWithImages);
+      
+      console.log(`[PRISM] ${sortedArticles.length}/${totalImages} articles avec images générées (triés par récence)`);
+      articlesToPersist = sortedArticles;
     } else {
+      // Pas de génération d'images - on passe directement à la phase complete
+      progressTracker.emit({
+        phase: 'complete',
+        progress: 97,
+        message: 'Finalisation',
+        detail: 'Préparation des données...'
+      });
+      
       if (isImagenServiceEnabled()) {
         console.warn("[PRISM] Supabase inactif, génération d'images ignorée pour garantir la cohérence.");
       } else {
@@ -1765,9 +1914,22 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
     }
 
     saveLocalCache(cacheKey, articlesToPersist);
+    
+    // Progression finale - Deep Harvest terminé!
+    progressTracker.emit({
+      phase: 'complete',
+      progress: 100,
+      message: 'Système Prêt',
+      detail: `${articlesToPersist.length} articles générés avec succès`,
+      metadata: { articlesGenerated: articlesToPersist.length }
+    });
+    
     return articlesToPersist;
 
   } catch (error) {
+    // Arrêter tout heartbeat en cours en cas d'erreur
+    progressTracker.stopHeartbeat();
+    
     console.error("Erreur Service PRISM (Switch to Mock Data):", error);
 
     if (isRateLimitError(error)) {

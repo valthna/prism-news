@@ -140,10 +140,11 @@ const normalizeSourceName = (name: string): string =>
 const createLogoUrl = (rawName: string): string => {
   const normalized = rawName.toLowerCase().replace(/\s+/g, '');
   if (!normalized) {
-    return 'https://logo.clearbit.com/reuters.com';
+    return 'https://www.google.com/s2/favicons?domain=reuters.com&sz=128';
   }
   const domain = normalized.includes('.') ? normalized : `${normalized}.com`;
-  return `https://logo.clearbit.com/${domain}`;
+  // Google Favicons est moins susceptible d'être bloqué par les ad blockers
+  return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
 };
 
 const createGoogleSearchUrl = (headline: string, sourceName: string): string =>

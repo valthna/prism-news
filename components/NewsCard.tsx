@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback, ReactNode } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, ReactNode, memo } from 'react';
 import { NewsArticle, Source } from '../types';
 import BiasAnalysisDisplay from './BiasAnalysisDisplay';
 import ActionButtons from './ActionButtons';
@@ -9,6 +9,7 @@ import { SparklesIcon } from './icons/SparklesIcon';
 import { ShareIcon } from './icons/ShareIcon';
 import CategorySelect from './CategorySelect';
 import { CATEGORY_OPTIONS, getCategoryOption } from '../constants/categories';
+import { hapticTap, hapticSuccess } from '../services/haptics';
 
 /**
  * Enhanced Headline - Better readability with text shadows only
@@ -275,6 +276,9 @@ const NewsCard: React.FC<NewsCardProps> = ({
       return;
     }
 
+    // Feedback haptique au clic
+    hapticTap();
+
     // Construire l'URL avec l'ID de l'article pour un lien direct
     const shareUrl = new URL(window.location.href);
     shareUrl.searchParams.set('article', article.id);
@@ -288,16 +292,22 @@ const NewsCard: React.FC<NewsCardProps> = ({
     try {
       if (typeof navigator !== 'undefined' && navigator.share) {
         await navigator.share(sharePayload);
+        hapticSuccess();
         setShareFeedback('Lien partagé');
       } else if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(`${sharePayload.title}\n${sharePayload.text}\n${sharePayload.url}`);
+        hapticSuccess();
         setShareFeedback('Lien copié');
       } else {
         setShareFeedback('Copiez le lien manuellement');
       }
     } catch (error) {
+      // L'utilisateur a annulé le partage - pas une vraie erreur
+      const isUserCancel = error instanceof Error && error.name === 'AbortError';
+      if (!isUserCancel) {
       console.error('Erreur pendant le partage', error);
-      setShareFeedback('Partage annulé');
+      }
+      setShareFeedback(isUserCancel ? '' : 'Partage annulé');
     } finally {
       if (shareTimeoutRef.current) {
         clearTimeout(shareTimeoutRef.current);
@@ -551,7 +561,7 @@ const NewsCard: React.FC<NewsCardProps> = ({
                             <div className="space-y-1.5">
                               {dissidentAnalysis.dissidents.slice(0, 3).map((source, idx) => (
                                 <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white/5">
-                                  <img src={source.logoUrl} alt={source.name} className="w-5 h-5 rounded-full object-cover bg-white/10" />
+                                  <img src={source.logoUrl} alt={source.name} loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover bg-white/10" />
                                   <div className="flex-1 min-w-0">
                                     <div className="text-[10px] text-white/90 font-medium truncate">{source.name}</div>
                                     <div className={`text-[8px] uppercase tracking-wider ${source.bias === 'left' ? 'text-blue-400' : source.bias === 'right' ? 'text-red-400' : 'text-gray-400'}`}>
@@ -587,7 +597,7 @@ const NewsCard: React.FC<NewsCardProps> = ({
                   </div>
 
                   {/* Headline with Enhanced Readability */}
-                  <EnhancedHeadline className="text-3xl sm:text-4xl lg:text-5xl font-serif font-black leading-[1.1] text-white tracking-tight break-words px-2 text-balance line-clamp-3 md:line-clamp-4">
+                  <EnhancedHeadline className="text-3xl sm:text-4xl lg:text-5xl font-serif font-black leading-[1.18] text-white tracking-tight break-words px-2 text-balance line-clamp-3 md:line-clamp-4 pb-1">
                     {article.headline.replace(/[\u{1F300}-\u{1F9FF}]/gu, '')}
                   </EnhancedHeadline>
                 </div>
@@ -767,4 +777,12 @@ const NewsCard: React.FC<NewsCardProps> = ({
   );
 };
 
-export default NewsCard;
+// Mémoïser le composant pour éviter les re-renders inutiles
+export default memo(NewsCard, (prevProps, nextProps) => {
+  // Comparaison personnalisée pour optimiser les performances
+  return (
+    prevProps.article.id === nextProps.article.id &&
+    prevProps.isInterfaceHidden === nextProps.isInterfaceHidden &&
+    prevProps.selectedCategory === nextProps.selectedCategory
+  );
+});

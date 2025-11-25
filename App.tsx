@@ -6,7 +6,7 @@ import Chatbot from './components/Chatbot';
 import ProgressBar from './components/ProgressBar';
 import SettingsModal from './components/SettingsModal';
 import SearchOverlay from './components/SearchOverlay';
-import OnboardingModal from './components/OnboardingModal';
+import OnboardingModal, { hasCompletedOnboarding } from './components/OnboardingModal';
 import { SettingsIcon } from './components/icons/SettingsIcon';
 import { SearchIcon } from './components/icons/SearchIcon';
 import { ShareIcon } from './components/icons/ShareIcon';
@@ -241,9 +241,13 @@ const LoadingScreen: React.FC<DetailedLoadingScreenProps> = ({ status, count, de
 };
 
 const ErrorScreen: React.FC<{ message: string }> = ({ message }) => (
-    <div className="h-screen w-screen bg-black flex flex-col items-center justify-center p-8 text-center z-[100]">
+    <div 
+        className="h-screen w-screen bg-black flex flex-col items-center justify-center p-8 text-center z-[100]"
+        role="alert"
+        aria-live="assertive"
+    >
         <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-6 animate-pulse">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-red-500">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-red-500" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
             </svg>
         </div>
@@ -251,7 +255,8 @@ const ErrorScreen: React.FC<{ message: string }> = ({ message }) => (
         <p className="text-sm text-gray-500 max-w-xs leading-relaxed mb-8">{message}</p>
         <button
             onClick={() => window.location.reload()}
-            className="px-6 py-3 bg-white text-black rounded-full font-bold text-xs uppercase tracking-widest hover:scale-105 transition-transform"
+            className="px-6 py-3 bg-white text-black rounded-full font-bold text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black"
+            aria-label="Recharger la page pour réessayer"
         >
             Relancer le système
         </button>
@@ -274,7 +279,8 @@ const App: React.FC = () => {
     const [currentCategory, setCurrentCategory] = useState<string>(DEFAULT_CATEGORY.value);
     const [currentQuery, setCurrentQuery] = useState<string>('');
     const [isInterfaceHidden, setIsInterfaceHidden] = useState<boolean>(false);
-    const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
+    // Affiche l'onboarding automatiquement lors de la première visite
+    const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(() => !hasCompletedOnboarding());
     const [isSearchLoading, setIsSearchLoading] = useState<boolean>(false);
     const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
@@ -654,6 +660,13 @@ const App: React.FC = () => {
 
     return (
         <div className="fixed inset-0 bg-black text-white overflow-hidden font-sans selection:bg-neon-accent selection:text-black">
+            {/* Skip link pour l'accessibilité clavier */}
+            <a 
+                href="#main-content" 
+                className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[200] focus:px-4 focus:py-2 focus:bg-neon-accent focus:text-black focus:rounded-lg focus:font-bold focus:text-sm"
+            >
+                Aller au contenu principal
+            </a>
             <ProgressBar progress={scrollProgress} />
 
             {/* BRANDING HEADER - COMPACT & REMOVED TOP SPACE */}
@@ -733,9 +746,12 @@ const App: React.FC = () => {
             </div>
 
             <main
+                id="main-content"
                 ref={scrollContainerRef}
                 className="h-full w-full overflow-y-scroll snap-y snap-mandatory scroll-smooth no-scrollbar"
                 style={{ scrollBehavior: 'smooth' }}
+                tabIndex={-1}
+                aria-label="Fil d'actualités"
             >
                 {articles.map((article) => (
                     <NewsCard
@@ -749,8 +765,23 @@ const App: React.FC = () => {
                     />
                 ))}
                 {articles.length === 0 && !loading && (
-                    <div className="h-screen w-full flex items-center justify-center snap-start">
-                        <p className="text-gray-500 font-light text-sm uppercase tracking-widest">Aucun signal détecté</p>
+                    <div className="h-screen w-full flex flex-col items-center justify-center snap-start gap-6 p-8" role="status" aria-live="polite">
+                        <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" className="w-10 h-10 text-gray-600" aria-hidden="true">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 01-2.25 2.25M16.5 7.5V18a2.25 2.25 0 002.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 002.25 2.25h13.5M6 7.5h3v3H6v-3z" />
+                            </svg>
+                        </div>
+                        <div className="text-center space-y-2">
+                            <p className="text-gray-400 font-medium text-base">Aucun signal détecté</p>
+                            <p className="text-gray-600 text-sm max-w-xs">Essayez d'actualiser ou de modifier vos critères de recherche</p>
+                        </div>
+                        <button
+                            onClick={handleRefresh}
+                            disabled={isRefreshing}
+                            className="mt-4 px-6 py-3 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-full font-bold text-xs uppercase tracking-widest transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-neon-accent disabled:opacity-50"
+                        >
+                            {isRefreshing ? 'Chargement...' : 'Actualiser'}
+                        </button>
                     </div>
                 )}
             </main>

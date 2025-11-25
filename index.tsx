@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import { SettingsProvider } from './contexts/SettingsContext';
+import { ToastProvider } from './components/Toast';
 import App from './App';
 
 // Lazy load Vercel analytics to prevent errors when blocked by adblockers
@@ -25,7 +26,9 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <SettingsProvider>
+      <ToastProvider>
       <App />
+      </ToastProvider>
     </SettingsProvider>
     <Suspense fallback={null}>
       <Analytics />

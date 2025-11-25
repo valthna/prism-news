@@ -138,6 +138,8 @@ const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sou
                                     <img
                                         src={source.logoUrl}
                                         alt={source.name}
+                                        loading="lazy"
+                                        decoding="async"
                                         className="w-full h-full object-cover"
                                         onError={(event) => {
                                             const img = event.currentTarget;

@@ -6,7 +6,7 @@ interface ProgressBarProps {
 
 const ProgressBar: React.FC<ProgressBarProps> = ({ progress }) => {
   return (
-    <div className="absolute top=0 left=0 w-full h-1.5 bg-white/20 z-20">
+    <div className="fixed top-0 left-0 w-full h-1 bg-black/40 z-[60]">
       <div 
         className="h-full bg-neon-accent transition-all duration-300 ease-linear" 
         style={{ 

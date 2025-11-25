@@ -121,6 +121,11 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClose }) =>
         >
             <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-2xl p-6 relative overflow-hidden shadow-xl flex flex-col min-h-[400px]">
                 
+                {/* Page indicator - top left */}
+                <span className="absolute top-4 left-5 text-sm text-white/60 font-medium tabular-nums">
+                    {currentSlide + 1}/{slides.length}
+                </span>
+
                 {/* Close Button */}
                 <button 
                     onClick={handleClose}
@@ -156,26 +161,6 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClose }) =>
 
                 {/* Footer Navigation */}
                 <div className="mt-auto flex flex-col items-center space-y-4">
-                    {/* Dots - Simple circular indicators */}
-                    <div className="flex items-center justify-center gap-2" role="tablist">
-                        {slides.map((_, idx) => (
-                            <button
-                                key={idx}
-                                onClick={() => { hapticTap(); setCurrentSlide(idx); }}
-                                role="tab"
-                                aria-selected={idx === currentSlide}
-                                aria-label={`Aller à la slide ${idx + 1}`}
-                                className={`
-                                    h-2 rounded-full transition-[width,background-color] duration-150 ease-out
-                                    ${idx === currentSlide 
-                                        ? 'w-5 bg-white' 
-                                        : 'w-2 bg-white/30 hover:bg-white/50'
-                                    }
-                                `}
-                            />
-                        ))}
-                    </div>
-
                     {/* Button */}
                     <button
                         onClick={nextSlide}

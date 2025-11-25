@@ -1,15 +1,57 @@
 import { GoogleGenAI } from "@google/genai";
 import { supabase } from './supabaseClient';
+import { recordImagenUsage } from './aiUsageLogger';
 
 export const SUPABASE_IMAGE_BUCKET = 'news-images';
+
+type BrowserEnv = Record<string, string | boolean | undefined>;
+
+const readBrowserEnv = (): BrowserEnv => {
+    try {
+        if (typeof import.meta !== 'undefined' && (import.meta as any)?.env) {
+            return (import.meta as any).env as BrowserEnv;
+        }
+    } catch {
+        // ignore
+    }
+    return {};
+};
+
+const pickString = (...candidates: Array<string | undefined | null>): string | undefined => {
+    for (const value of candidates) {
+        if (typeof value === 'string' && value.trim().length > 0) {
+            return value;
+        }
+    }
+    return undefined;
+};
+
+const browserEnv = readBrowserEnv();
 
 interface ImageGenerationOptions {
     prompt: string;
     aspectRatio?: "1:1" | "3:4" | "4:3" | "9:16" | "16:9";
     id?: string;
+    requireHostedImage?: boolean;
 }
 
 const truthyEnvValues = new Set(['1', 'true', 'yes', 'on']);
+
+const isNetworkFailure = (error: unknown): boolean => {
+    if (!error) return false;
+    if (error instanceof TypeError) return true;
+    const message =
+        typeof error === 'string'
+            ? error
+            : error instanceof Error
+                ? error.message
+                : typeof (error as any)?.message === 'string'
+                    ? (error as any).message
+                    : typeof (error as any)?.details === 'string'
+                        ? (error as any).details
+                        : undefined;
+    return typeof message === 'string' && /failed to fetch|network\s?error|TypeError/i.test(message);
+};
 
 const parseBooleanFlag = (value?: string | boolean | null): boolean => {
     if (typeof value === 'boolean') return value;
@@ -18,14 +60,26 @@ const parseBooleanFlag = (value?: string | boolean | null): boolean => {
 };
 
 const resolveApiKey = (): string | undefined => {
-    const isBrowser = typeof window !== 'undefined';
-    if (!isBrowser && typeof process !== 'undefined' && process.env?.API_KEY) {
-        return process.env.API_KEY;
-    }
-    if (typeof import.meta !== 'undefined' && (import.meta as any)?.env?.VITE_API_KEY) {
-        return (import.meta as any).env.VITE_API_KEY as string;
-    }
-    return undefined;
+    const nodeKey = (() => {
+        if (typeof process === 'undefined' || !process.env) {
+            return undefined;
+        }
+        return pickString(
+            process.env.API_KEY,
+            process.env.GEMINI_API_KEY,
+            process.env.VITE_API_KEY
+        );
+    })();
+
+    const browserKey = pickString(
+        browserEnv.VITE_API_KEY as string | undefined,
+        browserEnv.GEMINI_API_KEY as string | undefined,
+        browserEnv.VITE_GEMINI_API_KEY as string | undefined,
+        browserEnv.PUBLIC_GEMINI_API_KEY as string | undefined,
+        browserEnv.API_KEY as string | undefined
+    );
+
+    return browserKey ?? nodeKey;
 };
 
 const detectImageGenerationDisabled = (): boolean => {
@@ -42,12 +96,9 @@ const detectImageGenerationDisabled = (): boolean => {
         if (parseBooleanFlag(process.env?.DISABLE_IMAGE_GENERATION)) return true;
         if (parseBooleanFlag(process.env?.DISABLE_IMAGEN_SERVICE)) return true;
     }
-    if (typeof import.meta !== 'undefined' && (import.meta as any)?.env) {
-        const browserEnv = (import.meta as any).env as Record<string, string | boolean>;
-        if (parseBooleanFlag(browserEnv?.VITE_DISABLE_IMAGE_GENERATION)) return true;
-        if (parseBooleanFlag(browserEnv?.VITE_DISABLE_IMAGES)) return true;
-        if (parseBooleanFlag(browserEnv?.VITE_DISABLE_IMAGEN_SERVICE)) return true;
-    }
+    if (parseBooleanFlag(browserEnv?.VITE_DISABLE_IMAGE_GENERATION)) return true;
+    if (parseBooleanFlag(browserEnv?.VITE_DISABLE_IMAGES)) return true;
+    if (parseBooleanFlag(browserEnv?.VITE_DISABLE_IMAGEN_SERVICE)) return true;
     return false;
 };
 
@@ -87,8 +138,10 @@ const dataUrlToBlob = (dataUrl: string) => {
 
 let supabaseBucketMissing = false;
 
+let supabaseUploadsBlocked = false;
+
 const uploadImageToSupabase = async (dataUrl: string, identifier?: string): Promise<string | null> => {
-    if (!supabase || supabaseBucketMissing) {
+    if (!supabase || supabaseBucketMissing || supabaseUploadsBlocked) {
         return null;
     }
 
@@ -115,6 +168,9 @@ const uploadImageToSupabase = async (dataUrl: string, identifier?: string): Prom
                 supabaseBucketMissing = true;
             }
             console.warn("[PRISM] Échec upload Supabase:", message || uploadError);
+            if (isNetworkFailure(uploadError)) {
+                supabaseUploadsBlocked = true;
+            }
             return null;
         }
 
@@ -126,6 +182,9 @@ const uploadImageToSupabase = async (dataUrl: string, identifier?: string): Prom
         return data?.publicUrl ?? null;
     } catch (error) {
         console.warn("[PRISM] Upload Supabase impossible:", error);
+        if (isNetworkFailure(error)) {
+            supabaseUploadsBlocked = true;
+        }
         return null;
     }
 };
@@ -133,9 +192,9 @@ const uploadImageToSupabase = async (dataUrl: string, identifier?: string): Prom
 /**
  * Service pour générer des caricatures satiriques avec Gemini 3 Pro Image Preview
  * Modèle multimodal officiel optimisé pour la génération d'images haute qualité
- * 
- * Basé sur l'exemple officiel Google AI : 
- * https://ai.google.dev/gemini-api/docs/imagen
+ *
+ * Référence officielle Google AI :
+ * https://ai.google.dev/gemini-api/docs/models#gemini-3-pro-image-preview
  */
 export class ImagenService {
     private ai: GoogleGenAI;
@@ -145,10 +204,11 @@ export class ImagenService {
     }
 
     private async requestImage(enhancedPrompt: string, aspectRatio: ImageGenerationOptions['aspectRatio'], enableHighResolution: boolean, articleId?: string) {
-        // Stratégie de fallback : on tente d'abord le modèle Flash (Rapide/Performant), puis Imagen 3 standard
+        // Stratégie validée sur https://ai.google.dev/gemini-api/docs/models (maj 22 nov. 2025)
+        // On privilégie l'aperçu Gemini 3 Pro Image puis le modèle stable Gemini 2.5 Flash Image
         const modelsToTry = [
-            "gemini-2.0-flash",
-            "imagen-3.0-generate-001"
+            "gemini-3-pro-image-preview",
+            "gemini-2.5-flash-image"
         ];
         
         let lastError: any = null;
@@ -167,9 +227,9 @@ export class ImagenService {
     
                 try {
                     // Configuration adaptée selon le modèle
-                    const isFlash = modelName.includes('flash');
+                    const isFlashFamily = modelName.includes('flash');
                     const generationConfig: any = {
-                        responseModalities: isFlash ? ["IMAGE", "TEXT"] : ["IMAGE"], // Flash supporte/préfère parfois le mixte
+                        responseModalities: isFlashFamily ? ["IMAGE", "TEXT"] : ["IMAGE"],
                         temperature: 0.9,
                         imageConfig: {
                             // Flash est moins strict sur le 4K, on garde la config aspectRatio
@@ -177,8 +237,8 @@ export class ImagenService {
                         }
                     };
 
-                    // Seul le modèle Pro bénéficie explicitement du flag 4K si activé
-                    if (!isFlash && enableHighResolution) {
+                    // Seul Gemini 3 Pro Image Preview expose officiellement le flag 4K
+                    if (modelName === "gemini-3-pro-image-preview" && enableHighResolution) {
                         generationConfig.imageConfig.imageSize = "4K";
                     }
 
@@ -202,6 +262,17 @@ export class ImagenService {
     
                     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
                     console.log(`[ImagenService] ✅ Response received from ${modelName} in ${duration}s`);
+
+                    const logUsage = () => Promise.resolve(recordImagenUsage({
+                        model: modelName,
+                        operation: 'news_tile_image',
+                        metadata: {
+                            articleId: articleId ?? null,
+                            aspectRatio: aspectRatio ?? "3:4",
+                            highResolution: enableHighResolution,
+                        },
+                        highResolution: enableHighResolution && modelName === "gemini-3-pro-image-preview",
+                    })).catch(err => console.warn('[ImagenService] Usage logging failed:', err));
     
                     // Parcourir les parts pour trouver l'image
                     const candidates = response.candidates;
@@ -213,14 +284,18 @@ export class ImagenService {
                             if (part.inlineData && part.inlineData.data) {
                                 console.log(`[ImagenService] 🖼️ Image data found (inline_data) via ${modelName}`);
                                 const mimeType = part.inlineData.mimeType || 'image/png';
-                                return `data:${mimeType};base64,${part.inlineData.data}`;
+                                const data = `data:${mimeType};base64,${part.inlineData.data}`;
+                                logUsage();
+                                return data;
                             }
     
                             // Vérifier aussi inline_data sans underscore (variantes d'API)
                             if ((part as any).inline_data && (part as any).inline_data.data) {
                                 console.log(`[ImagenService] 🖼️ Image data found (inline-data) via ${modelName}`);
                                 const mimeType = (part as any).inline_data.mime_type || 'image/png';
-                                return `data:${mimeType};base64,${(part as any).inline_data.data}`;
+                                const data = `data:${mimeType};base64,${(part as any).inline_data.data}`;
+                                logUsage();
+                                return data;
                             }
                         }
                         
@@ -287,6 +362,7 @@ export class ImagenService {
             prompt,
             aspectRatio = "3:4",
             id,
+            requireHostedImage = false,
         } = options;
 
         // Le prompt est supposé être déjà enrichi via PRISM_PROMPTS.IMAGE_GENERATION.buildPrompt
@@ -296,12 +372,15 @@ export class ImagenService {
         try {
             const dataUrl = await this.requestImage(enhancedPrompt, aspectRatio, true, id);
 
-            // Tentative d'upload Supabase (si échoue à cause RLS ou autre, retourne null et on fallback sur base64)
-            const uploadedUrl = await uploadImageToSupabase(dataUrl, id ?? prompt);
+            const hostedUrl = await uploadImageToSupabase(dataUrl, id ?? prompt);
             
-            if (uploadedUrl) {
+            if (hostedUrl) {
                 console.log('[ImagenService] ✅ Image generated & uploaded to Supabase');
-                return uploadedUrl;
+                return hostedUrl;
+            }
+
+            if (requireHostedImage) {
+                throw new Error("IMAGEN_UPLOAD_REQUIRED");
             }
 
             console.log('[ImagenService] ⚠️ Upload failed/disabled, using base64 fallback');
@@ -311,6 +390,14 @@ export class ImagenService {
             if (this.isMediaResolutionDisabledError(error)) {
                 console.warn("[PRISM] Gemini ne permet pas la haute résolution sur ce modèle. Tentative avec la résolution standard.");
                 const dataUrl = await this.requestImage(enhancedPrompt, aspectRatio, false, id);
+                const hostedUrl = await uploadImageToSupabase(dataUrl, id ?? prompt);
+                if (hostedUrl) {
+                    console.log('[ImagenService] ✅ Image generated (standard res) & uploaded to Supabase');
+                    return hostedUrl;
+                }
+                if (requireHostedImage) {
+                    throw new Error("IMAGEN_UPLOAD_REQUIRED");
+                }
                 console.log('[ImagenService] ✅ Image generated (standard res), using base64');
                 return dataUrl;
             }

@@ -3,14 +3,13 @@ import { createPortal } from 'react-dom';
 import { ThumbsUpIcon } from './icons/ThumbsUpIcon';
 import { ShareIcon } from './icons/ShareIcon';
 import { NewsArticle } from '../types';
-
-// Icône "Avis/Debate"
-const OpinionIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" {...props}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-    </svg>
-);
-OpinionIcon.displayName = 'OpinionIcon';
+import { 
+    ReactionType, 
+    ReactionCounts,
+    getArticleReactions, 
+    toggleReaction, 
+    getUserReactionForArticle 
+} from '../services/reactionsService';
 
 const ActionButton: React.FC<{
     children: React.ReactNode,
@@ -23,41 +22,37 @@ const ActionButton: React.FC<{
 }> = ({ children, label, onClick, extraClass = "", activeColor, counter, minimal }) => {
     const glowStyles: React.CSSProperties | undefined = activeColor
         ? {
-            boxShadow: `0 0 24px ${activeColor}`,
-            borderColor: activeColor,
+            boxShadow: `0 0 2px ${activeColor}50`,
+            borderColor: `${activeColor}40`,
         }
         : undefined;
 
     const ButtonContent = (
-        <div className="relative inline-flex flex-col items-center gap-1">
+        <div className="relative inline-flex items-center gap-0.5">
             <button
                 onClick={onClick}
-                className={`flex items-center justify-center w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/5 relative disabled:opacity-50 transition-all duration-300 active:scale-90`}
+                className={`flex items-center justify-center w-8 h-8 rounded-full hover:bg-white/5 transition-all duration-300 active:scale-90`}
                 disabled={!onClick}
                 style={glowStyles}
                 title={label}
             >
                 {/* Content */}
-                <div className={`relative z-10 transition-all duration-300 flex items-center justify-center ${activeColor ? 'text-white scale-105' : 'text-gray-300 group-hover:text-white group-hover:scale-110'}`}>
-                    {React.isValidElement(children) 
-                        ? React.cloneElement(children as React.ReactElement, { 
+                <div className={`relative z-10 transition-all duration-300 flex items-center justify-center ${activeColor ? 'text-white scale-105' : 'text-white/40 group-hover:text-white group-hover:scale-110'}`}>
+                    {React.isValidElement(children)
+                        ? React.cloneElement(children as React.ReactElement, {
                             // @ts-ignore
                             className: `${(children.props as any).className || ''} ${children.type === 'svg' || (children.type as any).displayName?.includes('Icon') ? 'w-4 h-4' : 'w-full h-full flex items-center justify-center'}`,
-                            strokeWidth: 2 
-                          }) 
+                            strokeWidth: 2
+                        })
                         : children
                     }
                 </div>
             </button>
-             <span className="text-[8px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-white transition-colors duration-200 opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 absolute top-full mt-1 whitespace-nowrap">
-                {label}
-            </span>
-
-            {/* Counter Badge */}
+            {/* Counter - inline next to button */}
             {counter !== undefined && (
-                <div className="pointer-events-none absolute -top-1 -right-1 bg-white text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-xl border border-black/10 transform scale-100 transition-transform duration-200 z-20 min-w-[18px] text-center">
+                <span className="text-[10px] font-bold text-white/40 tabular-nums">
                     {counter}
-                </div>
+                </span>
             )}
         </div>
     );
@@ -73,37 +68,36 @@ const ActionButton: React.FC<{
     );
 };
 
-interface CommunityStats {
-    positive: number;
-    negative: number;
-}
-
 interface ActionButtonsProps {
-    article: Pick<NewsArticle, 'headline' | 'summary'>;
-    onShowSentiment: () => void;
+    article: Pick<NewsArticle, 'id' | 'headline' | 'summary'>;
     className?: string;
-    communityStats?: CommunityStats;
+    minimal?: boolean;
 }
 
-const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment, className = "", communityStats, minimal }) => {
-    const reactions = useMemo(() => ([
-        { emoji: '🔥', label: 'Top', id: 'fire', color: 'text-orange-500', glowColor: '#f97316' },
-        { emoji: '🤯', label: 'Choc', id: 'shock', color: 'text-purple-400', glowColor: '#a855f7' },
-        { emoji: '🤔', label: 'Doute', id: 'doubt', color: 'text-yellow-400', glowColor: '#eab308' },
-        { emoji: '😡', label: 'Colère', id: 'angry', color: 'text-red-500', glowColor: '#ef4444' },
-        { emoji: '👏', label: 'Bravo', id: 'clap', color: 'text-green-400', glowColor: '#22c55e' },
-    ]), []);
+type ReactionConfig = { emoji: string; label: string; id: ReactionType; color: string; glowColor: string };
+
+const REACTION_CONFIGS: ReactionConfig[] = [
+    { emoji: '🔥', label: 'Top', id: 'fire', color: 'text-orange-500', glowColor: '#f97316' },
+    { emoji: '🤯', label: 'Choc', id: 'shock', color: 'text-purple-400', glowColor: '#a855f7' },
+    { emoji: '🤔', label: 'Doute', id: 'doubt', color: 'text-yellow-400', glowColor: '#eab308' },
+    { emoji: '😡', label: 'Colère', id: 'angry', color: 'text-red-500', glowColor: '#ef4444' },
+    { emoji: '👏', label: 'Bravo', id: 'clap', color: 'text-green-400', glowColor: '#22c55e' },
+];
+
+const ActionButtons: React.FC<ActionButtonsProps> = ({ article, className = "", minimal }) => {
+    const reactions = useMemo(() => REACTION_CONFIGS, []);
 
     const [showReactions, setShowReactions] = useState(false);
-    const [selectedReaction, setSelectedReaction] = useState<{ emoji: string, label: string, color: string, id: string, glowColor: string } | null>(null);
+    const [selectedReaction, setSelectedReaction] = useState<ReactionConfig | null>(null);
     const [animateReaction, setAnimateReaction] = useState(false);
-    const [communityReactionCounts, setCommunityReactionCounts] = useState<Record<string, number>>(() => {
-        const counts: Record<string, number> = {};
-        reactions.forEach((reaction) => {
-            counts[reaction.id] = Math.floor(Math.random() * 160) + 40;
-        });
-        return counts;
+    const [communityReactionCounts, setCommunityReactionCounts] = useState<ReactionCounts>({
+        fire: 0,
+        shock: 0,
+        doubt: 0,
+        angry: 0,
+        clap: 0
     });
+    const [isLoading, setIsLoading] = useState(true);
     const [isShaking, setIsShaking] = useState(false);
     const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const triggerRef = useRef<HTMLDivElement>(null);
@@ -113,6 +107,33 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
 
     const isRow = className.includes('flex-row');
 
+    // Load reactions from database on mount
+    useEffect(() => {
+        const loadReactions = async () => {
+            setIsLoading(true);
+            try {
+                // Load community counts from database
+                const counts = await getArticleReactions(article.id);
+                setCommunityReactionCounts(counts);
+                
+                // Restore user's previous reaction from localStorage
+                const userReaction = getUserReactionForArticle(article.id);
+                if (userReaction) {
+                    const reactionConfig = reactions.find(r => r.id === userReaction);
+                    if (reactionConfig) {
+                        setSelectedReaction(reactionConfig);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load reactions:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        
+        loadReactions();
+    }, [article.id, reactions]);
+
     const totalCommunityReactions = useMemo(
         () => Object.values(communityReactionCounts).reduce((total, value) => total + value, 0),
         [communityReactionCounts]
@@ -120,17 +141,21 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
 
     const showReactionCounts = Boolean(selectedReaction);
 
-    const handleReaction = (r: typeof reactions[0]) => {
+    const handleReaction = async (r: ReactionConfig) => {
         const previousReaction = selectedReaction;
+        const previousReactionType = previousReaction?.id || null;
+        const newReactionType = previousReaction?.id === r.id ? null : r.id;
 
+        // Optimistic UI update
         if (previousReaction?.id === r.id) {
+            // Removing reaction
             setSelectedReaction(null);
-            setCommunityReactionCounts(prevCounts => {
-                const updated = { ...prevCounts };
-                updated[r.id] = Math.max(0, (updated[r.id] ?? 0) - 1);
-                return updated;
-            });
+            setCommunityReactionCounts(prevCounts => ({
+                ...prevCounts,
+                [r.id]: Math.max(0, (prevCounts[r.id] ?? 0) - 1)
+            }));
         } else {
+            // Adding/changing reaction
             setSelectedReaction(r);
             setAnimateReaction(true);
             setIsShaking(true);
@@ -144,6 +169,25 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                 updated[r.id] = (updated[r.id] ?? 0) + 1;
                 return updated;
             });
+        }
+
+        // Persist to database
+        try {
+            const result = await toggleReaction(article.id, newReactionType, previousReactionType);
+            if (result.success && result.counts) {
+                // Update with actual counts from server
+                setCommunityReactionCounts(prevCounts => ({
+                    ...prevCounts,
+                    ...result.counts
+                }));
+            }
+        } catch (error) {
+            console.error('Failed to save reaction:', error);
+            // Rollback on error
+            setSelectedReaction(previousReaction);
+            // Reload counts
+            const counts = await getArticleReactions(article.id);
+            setCommunityReactionCounts(counts);
         }
     };
 
@@ -327,10 +371,6 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                     </div>
                 )}
 
-                <ActionButton label="DÉBAT" onClick={onShowSentiment} minimal={minimal}>
-                    <OpinionIcon className="w-4 h-4" strokeWidth={2} />
-                </ActionButton>
-
                 <div
                     className="relative"
                     ref={triggerRef}
@@ -338,28 +378,28 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                     onMouseLeave={handleMouseLeave}
                 >
                     <div className={`${isShaking ? 'animate-shake' : ''}`}>
-                    <ActionButton
-                        label={selectedReaction ? "VOTÉ" : "RÉAGIR"}
-                        onClick={() => setShowReactions(!showReactions)}
-                        activeColor={selectedReaction?.glowColor}
-                        counter={totalCommunityReactions}
-                        minimal={minimal}
-                    >
-                        <div className={`flex items-center justify-center transform transition-transform duration-300 ${animateReaction ? 'scale-125' : ''}`}>
-                            {selectedReaction ? (
-                                <span className="text-[1.35rem] leading-none filter drop-shadow-glow animate-pop-in pt-[1px]">
-                                    {selectedReaction.emoji}
-                                </span>
-                            ) : (
-                                <ThumbsUpIcon className="w-5 h-5" strokeWidth={2} />
-                            )}
-                        </div>
-                    </ActionButton>
+                        <ActionButton
+                            label={selectedReaction ? "VOTÉ" : "RÉAGIR"}
+                            onClick={() => setShowReactions(!showReactions)}
+                            activeColor={selectedReaction?.glowColor}
+                            counter={totalCommunityReactions}
+                            minimal={minimal}
+                        >
+                            <div className={`flex items-center justify-center transform transition-transform duration-300 ${animateReaction ? 'scale-125' : ''}`}>
+                                {selectedReaction ? (
+                                    <span className="text-[1.35rem] leading-none filter drop-shadow-glow animate-pop-in pt-[1px]">
+                                        {selectedReaction.emoji}
+                                    </span>
+                                ) : (
+                                    <ThumbsUpIcon className="w-5 h-5" strokeWidth={2} />
+                                )}
+                            </div>
+                        </ActionButton>
+                    </div>
                 </div>
-            </div>
-            {reactionPopover}
+                {reactionPopover}
 
-            <style>{`
+                <style>{`
                 @keyframes float-main {
                     0% { transform: translateY(0) scale(0.5); opacity: 0; }
                     20% { transform: translateY(-40px) scale(1.5); opacity: 1; }
@@ -391,7 +431,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ article, onShowSentiment,
                 .animate-pop-in { animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
                 .animate-shake { animation: shake 0.3s cubic-bezier(.36,.07,.19,.97) both; }
             `}</style>
-        </div>
+            </div>
         </>
     );
 };

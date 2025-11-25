@@ -1,11 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { NewsArticle, Source, UserComment } from '../types';
+import React, { useState, useEffect, useRef, useMemo, useCallback, ReactNode } from 'react';
+import { NewsArticle, Source } from '../types';
 import BiasAnalysisDisplay from './BiasAnalysisDisplay';
 import ActionButtons from './ActionButtons';
 import SourceDetailModal from './SourceDetailModal';
 import SourceListModal from './SourceListModal';
-import SentimentModal from './SentimentModal';
-import HideInterfaceButton from './HideInterfaceButton';
 import ArticleDetailModal from './ArticleDetailModal';
 import { SparklesIcon } from './icons/SparklesIcon';
 import { ShareIcon } from './icons/ShareIcon';
@@ -13,38 +11,102 @@ import CategorySelect from './CategorySelect';
 import { CATEGORY_OPTIONS, getCategoryOption } from '../constants/categories';
 import { PRISM_PROMPTS } from '../services/prompts';
 
-const desktopHorizontalSafeArea: React.CSSProperties = {
-  '--safe-area-x': 'clamp(3.5rem, 5vw, 7rem)'
+/**
+ * Enhanced Headline - Better readability with text shadows only
+ */
+const EnhancedHeadline: React.FC<{ children: string; className?: string }> = ({ children, className = '' }) => {
+  return (
+    <h1 
+      className={className}
+      style={{
+        textShadow: `
+          0 2px 4px rgba(0,0,0,0.9),
+          0 4px 12px rgba(0,0,0,0.7),
+          0 8px 24px rgba(0,0,0,0.5)
+        `
+      }}
+    >
+      {children}
+    </h1>
+  );
 };
 
-const mobileHorizontalSafeArea: React.CSSProperties = {
-  '--safe-area-x': '1.5rem' // Increased from 1.375rem for more breathing room
+/**
+ * Parse text with **bold** markers and render as React elements
+ * Supports: **bold text** format
+ */
+const renderFormattedText = (text: string): ReactNode => {
+  if (!text) return null;
+  
+  // Split by **text** pattern
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  
+  return parts.map((part, index) => {
+    // Check if this part is a bold marker
+    if (part.startsWith('**') && part.endsWith('**')) {
+      const boldText = part.slice(2, -2);
+      return (
+        <strong key={index} className="font-bold text-white">
+          {boldText}
+        </strong>
+      );
+    }
+    return part;
+  });
+};
+
+/**
+ * Calcule le score de consensus basé sur les sources disponibles.
+ * Utilisé comme fallback quand le score n'est pas disponible dans les données.
+ */
+const calculateConsensusScore = (sources: Source[]): number => {
+  if (!sources || sources.length === 0) return 15; // Score minimum
+
+  let score = 0;
+
+  // 1. VOLUME (30 points max)
+  const count = sources.length;
+  const volumeScore = Math.min(30, Math.max(0, (count - 2) * 4));
+  score += volumeScore;
+
+  // 2. DIVERSITÉ POLITIQUE (30 points max)
+  const biasSet = new Set(sources.map(s => s.bias));
+  const hasLeft = biasSet.has('left');
+  const hasRight = biasSet.has('right');
+  const hasCenter = biasSet.has('center') || biasSet.has('neutral');
+
+  if (hasLeft && hasRight && hasCenter) {
+    score += 30; // Spectre complet
+  } else if ((hasLeft && hasRight) || (hasLeft && hasCenter) || (hasRight && hasCenter)) {
+    score += 20; // Équilibre partiel
+  } else {
+    score += 5; // Sources homogènes
+  }
+
+  // 3. QUALITÉ DES SOURCES (40 points max)
+  const trustKeywords = ['reuters', 'afp', 'apnews', 'bbc', 'ft.com', 'lemonde', 'nytimes', 'wsj', 'nature.com', 'science.org'];
+  const mediumTrustKeywords = ['cnn', 'fox', 'liberation', 'figaro', 'guardian', 'politico', 'lesechos', 'businessinsider', 'cnbc'];
+
+  let qualityScore = 0;
+  sources.forEach(source => {
+    const name = source.name.toLowerCase();
+    if (trustKeywords.some(k => name.includes(k))) {
+      qualityScore += 8;
+    } else if (mediumTrustKeywords.some(k => name.includes(k))) {
+      qualityScore += 4;
+    } else {
+      qualityScore += 1;
+    }
+  });
+  score += Math.min(40, qualityScore);
+
+  // Normalisation (15-98%)
+  return Math.min(98, Math.max(15, Math.round(score)));
 };
 
 const cardContentSafeArea: React.CSSProperties = {
-  '--safe-area-top': 'var(--card-content-safe-area-top, clamp(4.75rem, 7vw, 6.5rem))',
+  '--safe-area-top': 'var(--card-content-safe-area-top, clamp(5.5rem, 8vw, 7.5rem))',
   '--safe-area-bottom': 'clamp(2rem, 4vw, 3rem)'
-};
-
-const mobileSpectreOffset = 'calc(env(safe-area-inset-bottom, 0px) + 1.5rem)';
-
-const desktopGridGutter: React.CSSProperties = {
-  '--desktop-column-gutter': 'clamp(2rem, 4vw, 3.75rem)'
-};
-
-const heroFrameStyle: React.CSSProperties = {
-  clipPath: 'inset(0 round 24px)',
-  WebkitMaskImage: 'radial-gradient(circle, #fff 99%, rgba(255,255,255,0.98) 100%)',
-  backfaceVisibility: 'hidden',
-  willChange: 'transform'
-};
-
-const heroMediaDimensions: React.CSSProperties = {
-  width: '100%',
-  maxWidth: '420px',
-  height: '100%',
-  maxHeight: '100%',
-  minHeight: 'min(300px, 30vh)' // Plus flexible: 300px ou 30% de la hauteur si petit écran
 };
 
 interface NewsCardProps {
@@ -54,7 +116,6 @@ interface NewsCardProps {
   isInterfaceHidden: boolean;
   selectedCategory: string;
   onCategoryFilterChange: (category: string) => void;
-  onDebateVisibilityChange?: (isOpen: boolean) => void;
 }
 
 const NewsCard: React.FC<NewsCardProps> = ({
@@ -63,23 +124,15 @@ const NewsCard: React.FC<NewsCardProps> = ({
   onChatOpen,
   isInterfaceHidden,
   selectedCategory,
-  onCategoryFilterChange,
-  onDebateVisibilityChange
+  onCategoryFilterChange
 }) => {
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
   const [isSourceListOpen, setIsSourceListOpen] = useState(false);
-  const [isSentimentModalOpen, setIsSentimentModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [localComments, setLocalComments] = useState<UserComment[]>(article.comments || []);
   const [isReliabilityInfoVisible, setIsReliabilityInfoVisible] = useState(false);
   const [isMobileReliabilityInfoVisible, setIsMobileReliabilityInfoVisible] = useState(false);
   const [isMobileCategoryMenuOpen, setIsMobileCategoryMenuOpen] = useState(false);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
-  const communityStats = useMemo(() => {
-    const positive = localComments.filter(c => c.sentiment === 'positive').length;
-    const negative = localComments.filter(c => c.sentiment === 'negative').length;
-    return { positive, negative };
-  }, [localComments]);
   const activeFilterCategory = useMemo(
     () => getCategoryOption(selectedCategory),
     [selectedCategory]
@@ -99,14 +152,22 @@ const NewsCard: React.FC<NewsCardProps> = ({
     setImageSrc(initialSrc);
   }, [initialSrc]);
 
+  useEffect(() => {
+    if (imgRef.current && imgRef.current.complete) {
+      setImageLoaded(true);
+    }
+  }, [imageSrc]);
+
   const cardRef = useRef<HTMLDivElement>(null);
   const reliabilityInfoRef = useRef<HTMLDivElement>(null);
   const reliabilityTriggerRef = useRef<HTMLDivElement>(null);
   const mobileReliabilityInfoRef = useRef<HTMLDivElement>(null);
   const mobileReliabilityTriggerRef = useRef<HTMLDivElement>(null);
   const mobileCategoryMenuRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const shareTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [isIntersecting, setIsIntersecting] = useState(false);
+
   useEffect(() => {
     if (!isReliabilityInfoVisible) return;
     const handlePointerDown = (event: PointerEvent) => {
@@ -123,8 +184,6 @@ const NewsCard: React.FC<NewsCardProps> = ({
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [isReliabilityInfoVisible]);
 
-  const openReliabilityInfo = () => setIsReliabilityInfoVisible(true);
-  const closeReliabilityInfo = () => setIsReliabilityInfoVisible(false);
   const toggleReliabilityInfo = () => setIsReliabilityInfoVisible(prev => !prev);
 
   useEffect(() => {
@@ -166,10 +225,6 @@ const NewsCard: React.FC<NewsCardProps> = ({
   }, [isMobileCategoryMenuOpen]);
 
   const toggleMobileReliabilityInfo = () => setIsMobileReliabilityInfoVisible(prev => !prev);
-  useEffect(() => {
-    onDebateVisibilityChange?.(isSentimentModalOpen);
-  }, [isSentimentModalOpen, onDebateVisibilityChange]);
-
 
   useEffect(() => {
     return () => {
@@ -178,7 +233,6 @@ const NewsCard: React.FC<NewsCardProps> = ({
       }
     };
   }, []);
-
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -193,10 +247,7 @@ const NewsCard: React.FC<NewsCardProps> = ({
     if (cardRef.current) observer.observe(cardRef.current);
     return () => observer.disconnect();
   }, [article.id, onVisible]);
-
-  const handleAddComment = (comment: UserComment) => {
-    setLocalComments(prev => [comment, ...prev]);
-  };
+  
   const handleImageError = () => {
     if (imageSrc !== pollinationsUrl) {
       setImageSrc(pollinationsUrl);
@@ -237,8 +288,90 @@ const NewsCard: React.FC<NewsCardProps> = ({
 
   const isLive = article.publishedAt?.toUpperCase().includes('DIRECT') || article.publishedAt?.toUpperCase().includes('LIVE');
   const displayDate = article.publishedAt || "RÉCENT";
-  const reliabilityScore = Math.round(article.biasAnalysis?.reliabilityScore ?? 0);
-  const categoryLabel = (article.category || 'Général').toUpperCase();
+  
+  // Filtrer pour n'utiliser que les sources vérifiées (qui ont réellement traité le sujet)
+  // Détecte aussi les sources "amplifiées" par leurs coverageSummary génériques
+  const verifiedSources = useMemo(() => {
+    // Patterns typiques des sources amplifiées (générées automatiquement)
+    const genericPatterns = [
+      /^(décryptage|perspective|contre-enquête|couverture|synthèse|fil d'actualité|lecture|traitement|données|étude|position)/i,
+      /\b(par le monde|du guardian|de mediapart|de libération|de l'humanité|de vox|de reuters|associated press|de l'afp|bbc de|de politico|d'axios|par le figaro|du wall street journal|de les échos|the economist|de fox news|new york post|de l'oms|de la banque mondiale|de l'ocde|de l'onu)\b/i,
+      / (sur|autour de|concernant|appliquée? à|liée? à|au sujet de|portant sur|consacrée? à) .{5,}\.$/i
+    ];
+    
+    return (article.sources || []).filter(s => {
+      // Si explicitement marqué comme non vérifié, filtrer
+      if (s.isVerified === false) return false;
+      // Si explicitement marqué comme vérifié, garder
+      if (s.isVerified === true) return true;
+      // Pour les anciennes données sans le champ, détecter les patterns génériques
+      const summary = s.coverageSummary || '';
+      const isGeneric = genericPatterns.some(pattern => pattern.test(summary));
+      return !isGeneric;
+    });
+  }, [article.sources]);
+  
+  // Calcul du consensus avec fallback si score invalide ou absent
+  const consensusScore = useMemo(() => {
+    const storedScore = article.biasAnalysis?.consensusScore;
+    // Si le score existe et est valide (> 0), l'utiliser
+    if (typeof storedScore === 'number' && storedScore > 0) {
+      return Math.round(storedScore);
+    }
+    // Sinon, recalculer à partir des sources vérifiées uniquement
+    return calculateConsensusScore(verifiedSources);
+  }, [article.biasAnalysis?.consensusScore, verifiedSources]);
+
+  // Analyse des sources qui se démarquent (dissidentes)
+  const dissidentAnalysis = useMemo(() => {
+    if (verifiedSources.length < 2) return null;
+    
+    // Calculer la position moyenne
+    const avgPosition = verifiedSources.reduce((sum, s) => sum + s.position, 0) / verifiedSources.length;
+    
+    // Compter les sources par biais
+    const biasCounts: Record<string, Source[]> = {};
+    verifiedSources.forEach(s => {
+      const bias = s.bias || 'neutral';
+      if (!biasCounts[bias]) biasCounts[bias] = [];
+      biasCounts[bias].push(s);
+    });
+    
+    // Trouver le biais majoritaire
+    let majorityBias = 'center';
+    let maxCount = 0;
+    Object.entries(biasCounts).forEach(([bias, sources]) => {
+      if (sources.length > maxCount) {
+        maxCount = sources.length;
+        majorityBias = bias;
+      }
+    });
+    
+    // Identifier les sources dissidentes (biais minoritaire OU position éloignée de >30 pts)
+    const dissidents: Source[] = [];
+    verifiedSources.forEach(s => {
+      const positionDiff = Math.abs(s.position - avgPosition);
+      const isMinorityBias = biasCounts[s.bias]?.length === 1 && verifiedSources.length > 2;
+      const isExtreme = positionDiff > 30;
+      
+      if (isMinorityBias || isExtreme) {
+        dissidents.push(s);
+      }
+    });
+    
+    // Déterminer la tendance générale
+    let trend: 'left' | 'right' | 'balanced' = 'balanced';
+    if (avgPosition < 40) trend = 'left';
+    else if (avgPosition > 60) trend = 'right';
+    
+    return {
+      dissidents,
+      majorityBias,
+      avgPosition,
+      trend,
+      biasCounts
+    };
+  }, [verifiedSources]);
 
   return (
     <>
@@ -248,13 +381,14 @@ const NewsCard: React.FC<NewsCardProps> = ({
       >
         {/* BACKGROUND (Unified logic) */}
         <div className="absolute inset-0 z-0">
-          <div className="absolute inset-0 bg-gray-900" />
+          <div className="absolute inset-0 bg-gray-900/40" />
           {!imageLoaded && (
             <div className="absolute inset-0 bg-gray-800 animate-pulse z-10">
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]"></div>
             </div>
           )}
           <img
+            ref={imgRef}
             src={imageSrc}
             alt="Background Atmosphere"
             aria-hidden="true"
@@ -262,7 +396,7 @@ const NewsCard: React.FC<NewsCardProps> = ({
             onError={handleImageError}
             className={`absolute inset-0 w-full h-full object-cover lg:blur-[120px] lg:opacity-20 lg:scale-110 transition-opacity duration-[1500ms] ease-out ${imageLoaded ? 'opacity-100 lg:opacity-20' : 'opacity-0'}`}
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/90 lg:bg-black/40 lg:backdrop-blur-[2px]" />
+          <div className="absolute inset-0 lg:bg-black/20 lg:backdrop-blur-[2px]" />
         </div>
 
         {/* MAIN CONTENT CONTAINER */}
@@ -270,227 +404,269 @@ const NewsCard: React.FC<NewsCardProps> = ({
           className={`absolute inset-0 z-30 flex flex-col pointer-events-none transition-opacity duration-300 ${isInterfaceHidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
           style={cardContentSafeArea}
         >
-          <div className="flex-1 w-full h-full max-w-[1800px] mx-auto flex md:items-center md:px-12">
-            
-            <div className="w-full h-full md:h-auto grid grid-cols-1 md:grid-cols-12 gap-0 md:gap-12 items-stretch pb-safe-bottom md:pb-0 px-6 md:px-0">
-                
-                {/* CARD COLUMN (Mobile: Full width bottom / Desktop: Left col) */}
-                <div className="col-span-1 md:col-span-5 pointer-events-auto flex flex-col justify-center z-50 w-full py-8 md:py-0">
-                    
-                    {/* THE UNIVERSAL CARD */}
-                    <div className="flex flex-col gap-4 overflow-visible relative">
-                        
-                        {/* HEADER METADATA (Category & Reliability) */}
-                        <div className="flex items-center justify-between w-full px-2 relative z-[70]">
-                            <div className="relative" ref={mobileCategoryMenuRef}>
-                  <button
-                    onClick={() => setIsMobileCategoryMenuOpen(prev => !prev)}
-                                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-black/40 border border-white/10 backdrop-blur-md active:scale-95 transition-all shadow-lg group hover:bg-black/60"
-                                    aria-label="Changer de catégorie"
-                                >
-                                    <span className="text-lg leading-none filter drop-shadow-sm group-hover:scale-110 transition-transform">{article.emoji}</span>
-                                    <div className="h-3 w-px bg-white/20"></div>
-                                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-white shadow-black/50 drop-shadow-md">
-                        {activeFilterCategory.value}
-                      </span>
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-white/70 group-hover:text-white transition-colors">
-                                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-                                    </svg>
-                  </button>
+          <div className="flex-1 w-full h-full max-w-[1800px] mx-auto flex flex-col justify-end lg:justify-center px-5 md:px-12 pt-20 md:pt-24 pb-safe-bottom">
 
-                  <div
-                                    className={`absolute left-0 top-full mt-2 w-64 rounded-2xl border border-white/15 bg-black/95 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] transition-all duration-200 origin-top-left overflow-hidden z-[90] ${isMobileCategoryMenuOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-2 pointer-events-none'
-                      }`}
-                  >
-                                    <ul role="listbox" aria-label="Catégories" className="max-h-64 overflow-y-auto p-1.5 space-y-1">
-                      {CATEGORY_OPTIONS.map((option) => (
-                        <li key={option.value}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onCategoryFilterChange(option.value);
-                              setIsMobileCategoryMenuOpen(false);
-                            }}
-                                            className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all ${selectedCategory === option.value ? 'bg-white/15 shadow-inner' : 'hover:bg-white/10 active:bg-white/5'
-                                            }`}
-                                        >
-                                            <span className="text-xl leading-none w-8 text-center">{option.emoji}</span>
-                                            <span className="text-xs font-bold uppercase tracking-wider text-white/90">{option.value}</span>
-                                            {selectedCategory === option.value && (
-                                            <div className="ml-auto w-1.5 h-1.5 rounded-full bg-neon-accent shadow-[0_0_8px_theme(colors.neon-accent)]"></div>
-                                            )}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-                            
-                            {/* RELIABILITY INDICATOR */}
-                            <div className="relative">
-                                <div 
-                                    ref={mobileReliabilityTriggerRef}
-                                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-black/40 border border-white/10 backdrop-blur-md cursor-help active:scale-95 transition-all shadow-lg hover:bg-black/60 group"
-                                    onClick={(e) => { e.stopPropagation(); toggleMobileReliabilityInfo(); }}
-                                >
-                                    <div className="flex flex-col items-end leading-none">
-                                        <span className="text-[7px] font-bold uppercase tracking-wider text-white/70 mb-0.5 group-hover:text-white transition-colors">Fiabilité</span>
-                                        <span className={`font-mono font-bold text-xs ${reliabilityScore >= 80 ? 'text-green-400' : reliabilityScore >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
-                                            {reliabilityScore}%
-                                        </span>
-                                    </div>
-                                    <div className={`w-2 h-2 rounded-full ${reliabilityScore >= 80 ? 'bg-green-500' : reliabilityScore >= 50 ? 'bg-yellow-500' : 'bg-red-500'} shadow-[0_0_10px_currentColor]`}></div>
-                                </div>
+            <div className="w-full max-w-7xl mx-auto flex flex-col lg:flex-row gap-4 lg:gap-8 items-stretch h-auto lg:h-full max-h-[80vh]">
 
-                                {/* Mobile Reliability Popover */}
-                                <div
-                                    ref={mobileReliabilityInfoRef}
-                                    className={`absolute right-0 top-full mt-3 w-[85vw] max-w-[280px] rounded-2xl bg-black/90 border border-white/15 backdrop-blur-2xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.9)] text-left space-y-4 transition-all duration-300 z-[80] ${isMobileReliabilityInfoVisible ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-2 pointer-events-none'}`}
-                                >
-                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-400 border-b border-white/10 pb-2 mb-2 flex justify-between items-center">
-                                        <span>Score de fiabilité</span>
-                                        <span className={`text-xs font-mono ${reliabilityScore >= 80 ? 'text-green-400' : 'text-yellow-400'}`}>{reliabilityScore}%</span>
-                                    </div>
-                                    <div className="space-y-3">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-xs text-gray-300">Diversité des sources</span>
-                                        <div className="h-1 w-16 bg-gray-800 rounded-full overflow-hidden">
-                                            <div className="h-full bg-blue-500 w-[40%]"></div>
-                                        </div>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-xs text-gray-300">Fact-checking</span>
-                                        <div className="h-1 w-16 bg-gray-800 rounded-full overflow-hidden">
-                                            <div className="h-full bg-purple-500 w-[35%]"></div>
-                                        </div>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-xs text-gray-300">Historique</span>
-                                        <div className="h-1 w-16 bg-gray-800 rounded-full overflow-hidden">
-                                            <div className="h-full bg-green-500 w-[25%]"></div>
-                                        </div>
-                                    </div>
-                                    </div>
-                                </div>
-                            </div>
-              </div>
+              {/* LEFT COLUMN (Header + Content) */}
+              <div className="flex-1 flex flex-col gap-2 lg:gap-4 relative z-50 min-h-0 justify-end lg:justify-center">
 
-                        {/* HEADLINE */}
-                        <h1 className="text-3xl sm:text-4xl lg:text-6xl font-serif font-bold leading-[0.95] text-white tracking-tight break-words drop-shadow-lg px-2 mt-2 lg:mt-4">
-                            {article.headline.replace(/[\u{1F300}-\u{1F9FF}]/gu, '')}
-              </h1>
-
-                        {/* CONTENT CARD */}
-                        <div className="glass-panel rounded-[24px] p-6 md:p-8 relative flex flex-col gap-6 shadow-[0_20px_40px_rgba(0,0,0,0.6)] bg-black/30 backdrop-blur-3xl border border-white/10">
-                            <div className="relative pr-2">
-                <p
-                  onClick={() => setIsDetailModalOpen(true)}
-                                    className="text-[17px] text-white/90 font-sans leading-relaxed line-clamp-4 break-words cursor-pointer hover:text-white transition-colors font-medium tracking-wide antialiased"
-                >
-                  {article.summary}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setIsDetailModalOpen(true)}
-                                    className="absolute -bottom-2 right-0 w-7 h-7 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md text-white transition-all active:scale-90 border border-white/5 group"
-                                    aria-label="Lire la suite"
-                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5 ml-0.5 group-hover:translate-x-0.5 transition-transform">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                                    </svg>
-                </button>
-                            </div>
-                            
-                            {/* SOURCES INTEGRATION */}
-                            <div className="py-2 border-t border-white/5 relative z-10">
-                                <BiasAnalysisDisplay
-                                analysis={article.biasAnalysis}
-                                sources={article.sources}
-                                onSourceSelect={setSelectedSource}
-                                onShowSources={() => setIsSourceListOpen(true)}
-                                className="w-full"
-                                />
-                            </div>
-                            
-                            {/* FOOTER ACTION BAR */}
-                            <div className="flex items-center justify-between pt-4 border-t border-white/10 mt-1">
-                                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-400/80">
-                                {isLive ? (
-                                    <div className="flex items-center gap-1.5 text-red-400">
-                                        <span className="relative flex h-2 w-2">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                                        </span>
-                                        <span>Direct</span>
-                                    </div>
-                                ) : (
-                    <span>{displayDate}</span>
-                                )}
-                  </div>
-                                
-                                <div className="flex items-center gap-5">
-                    <div className="flex flex-col items-center gap-1 group relative">
+                {/* HEADER GROUP (Badges + Headline) */}
+                <div className="w-full relative z-[70] shrink-0">
+                  {/* Badges Row */}
+                  <div className="flex items-center justify-between w-full mb-2 lg:mb-4">
+                    {/* Category Badge */}
+                    <div className="relative pointer-events-auto" ref={mobileCategoryMenuRef}>
                       <button
-                        onClick={handleShareArticle}
-                        className="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/5 transition-all duration-300 active:scale-90 text-gray-300 hover:text-white hover:scale-110"
-                        aria-label="Partager"
+                        onClick={() => setIsMobileCategoryMenuOpen(prev => !prev)}
+                        className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-black/40 border border-white/10 backdrop-blur-xl active:scale-95 transition-all group hover:bg-black/50"
+                        aria-label="Changer de catégorie"
                       >
-                        <ShareIcon className="w-4 h-4" strokeWidth={2} />
+                        <span className="text-lg leading-none filter drop-shadow-sm group-hover:scale-110 transition-transform">{article.emoji}</span>
+                        <div className="h-3 w-px bg-white/20"></div>
+                        <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-white shadow-black/50 drop-shadow-md">
+                          {activeFilterCategory.value}
+                        </span>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-white/70 group-hover:text-white transition-colors">
+                          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                        </svg>
                       </button>
-                      <span className="text-[8px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-white transition-colors duration-200 opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 absolute top-full mt-1 whitespace-nowrap">
-                        Partager
-                      </span>
+
+                      <div
+                        className={`absolute left-0 top-full mt-2 w-64 rounded-2xl border border-white/15 bg-black/95 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] transition-all duration-200 origin-top-left overflow-hidden z-[90] ${isMobileCategoryMenuOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-2 pointer-events-none'
+                          }`}
+                      >
+                        <ul role="listbox" aria-label="Catégories" className="max-h-64 overflow-y-auto p-1.5 space-y-1">
+                          {CATEGORY_OPTIONS.map((option) => (
+                            <li key={option.value}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onCategoryFilterChange(option.value);
+                                  setIsMobileCategoryMenuOpen(false);
+                                }}
+                                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all ${selectedCategory === option.value ? 'bg-white/15 shadow-inner' : 'hover:bg-white/10 active:bg-white/5'
+                                  }`}
+                              >
+                                <span className="text-xl leading-none w-8 text-center">{option.emoji}</span>
+                                <span className="text-xs font-bold uppercase tracking-wider text-white/90">{option.value}</span>
+                                {selectedCategory === option.value && (
+                                  <div className="ml-auto w-1.5 h-1.5 rounded-full bg-neon-accent shadow-[0_0_8px_theme(colors.neon-accent)]"></div>
+                                )}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
 
-                    <div className="flex flex-col items-center gap-1 group relative">
+                    {/* Reliability Badge */}
+                    <div className="relative pointer-events-auto">
+                      <div
+                        ref={mobileReliabilityTriggerRef}
+                        className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-black/40 border border-white/10 backdrop-blur-xl cursor-help active:scale-95 transition-all hover:bg-black/50 group"
+                        onClick={(e) => { e.stopPropagation(); toggleMobileReliabilityInfo(); }}
+                      >
+                        <div className="flex flex-col items-end leading-none">
+                          <span className="text-[7px] font-bold uppercase tracking-wider text-white/50 mb-0.5 group-hover:text-white transition-colors">Consensus</span>
+                          <span className={`font-mono font-bold text-xs ${consensusScore >= 80 ? 'text-emerald-400' : consensusScore >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                            {consensusScore}%
+                          </span>
+                        </div>
+                        <div className={`w-2 h-2 rounded-full ${consensusScore >= 80 ? 'bg-emerald-500' : consensusScore >= 50 ? 'bg-yellow-500' : 'bg-red-500'} shadow-[0_0_10px_currentColor]`}></div>
+                      </div>
+
+                      {/* Mobile Reliability Popover */}
+                      <div
+                        ref={mobileReliabilityInfoRef}
+                        className={`absolute right-0 top-full mt-3 w-[85vw] max-w-[320px] rounded-2xl bg-black/90 border border-white/15 backdrop-blur-2xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.9)] text-left space-y-3 transition-all duration-300 z-[80] ${isMobileReliabilityInfoVisible ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-2 pointer-events-none'}`}
+                      >
+                        <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-gray-400 border-b border-white/10 pb-2 mb-2 flex justify-between items-center">
+                          <span>Niveau de consensus</span>
+                          <span className={`text-xs font-mono ${consensusScore >= 80 ? 'text-green-400' : consensusScore >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>{consensusScore}%</span>
+                        </div>
+                        <p className="text-[11px] text-gray-400 leading-relaxed">
+                          Mesure l'accord entre les différentes sources sur les faits principaux de cette actualité.
+                        </p>
+                        
+                        {/* Répartition des sources */}
+                        {dissidentAnalysis && (
+                          <div className="pt-2 border-t border-white/5 space-y-2">
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-gray-500">Répartition</div>
+                            <div className="flex gap-1 items-center">
+                              {dissidentAnalysis.biasCounts['left']?.length > 0 && (
+                                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-blue-500/20 border border-blue-500/30">
+                                  <span className="text-[9px] text-blue-400 font-medium">{dissidentAnalysis.biasCounts['left'].length} gauche</span>
+                                </div>
+                              )}
+                              {(dissidentAnalysis.biasCounts['center']?.length > 0 || dissidentAnalysis.biasCounts['neutral']?.length > 0) && (
+                                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-gray-500/20 border border-gray-500/30">
+                                  <span className="text-[9px] text-gray-400 font-medium">{(dissidentAnalysis.biasCounts['center']?.length || 0) + (dissidentAnalysis.biasCounts['neutral']?.length || 0)} centre</span>
+                                </div>
+                              )}
+                              {dissidentAnalysis.biasCounts['right']?.length > 0 && (
+                                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/20 border border-red-500/30">
+                                  <span className="text-[9px] text-red-400 font-medium">{dissidentAnalysis.biasCounts['right'].length} droite</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Sources dissidentes */}
+                        {dissidentAnalysis && dissidentAnalysis.dissidents.length > 0 && consensusScore < 85 && (
+                          <div className="pt-2 border-t border-white/5 space-y-2">
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-amber-500/80 flex items-center gap-1.5">
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                                <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                              </svg>
+                              {dissidentAnalysis.dissidents.length === 1 ? 'Source qui se démarque' : 'Sources qui se démarquent'}
+                            </div>
+                            <div className="space-y-1.5">
+                              {dissidentAnalysis.dissidents.slice(0, 3).map((source, idx) => (
+                                <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white/5">
+                                  <img src={source.logoUrl} alt={source.name} className="w-5 h-5 rounded-full object-cover bg-white/10" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-[10px] text-white/90 font-medium truncate">{source.name}</div>
+                                    <div className={`text-[8px] uppercase tracking-wider ${source.bias === 'left' ? 'text-blue-400' : source.bias === 'right' ? 'text-red-400' : 'text-gray-400'}`}>
+                                      {source.bias === 'left' ? 'Gauche' : source.bias === 'right' ? 'Droite' : 'Centre'}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Consensus fort */}
+                        {consensusScore >= 85 && (
+                          <div className="pt-2 border-t border-white/5">
+                            <div className="flex items-center gap-2 text-[10px] text-emerald-400">
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+                              </svg>
+                              <span className="font-medium">Fort accord entre les sources</span>
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="pt-2 border-t border-white/5">
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="text-gray-500">Sources analysées</span>
+                            <span className="text-white/80 font-medium">{verifiedSources.length}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Headline with Enhanced Readability */}
+                  <EnhancedHeadline className="text-3xl sm:text-4xl lg:text-5xl font-serif font-black leading-[1.1] text-white tracking-tight break-words px-2 text-balance line-clamp-3 md:line-clamp-4">
+                    {article.headline.replace(/[\u{1F300}-\u{1F9FF}]/gu, '')}
+                  </EnhancedHeadline>
+                </div>
+
+                {/* TEXT CARD */}
+                <div className="glass-panel rounded-[24px] lg:rounded-[32px] px-6 pt-6 pb-4 lg:px-8 lg:pt-8 lg:pb-6 relative flex flex-col gap-2 bg-black/40 backdrop-blur-3xl overflow-hidden pointer-events-auto shrink-0">
+                  
+                  {/* Share Button - Top Right */}
+                  <button
+                    onClick={handleShareArticle}
+                    className="absolute top-4 right-4 flex items-center justify-center w-8 h-8 rounded-full hover:bg-white/5 transition-all duration-300 active:scale-90 text-white/40 hover:text-white z-20"
+                    aria-label="Partager"
+                  >
+                    <ShareIcon className="w-4 h-4" strokeWidth={2} />
+                  </button>
+
+                  <div className="relative flex flex-col pr-10">
+                    <p
+                      onClick={() => setIsDetailModalOpen(true)}
+                      className="text-[16px] lg:text-[18px] text-white/85 font-sans leading-relaxed break-words cursor-pointer hover:text-white transition-colors font-normal tracking-wide antialiased line-clamp-3 sm:line-clamp-4 lg:line-clamp-5"
+                    >
+                      {renderFormattedText(article.summary)}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setIsDetailModalOpen(true)}
+                      className="mt-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40 hover:text-white transition-all group w-fit shrink-0"
+                      aria-label="Voir le détail"
+                    >
+                      Voir le détail
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3 group-hover:translate-x-0.5 transition-transform opacity-0 group-hover:opacity-100">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* SOURCES INTEGRATION */}
+                  <div className="pt-3 pb-1 relative z-10">
+                    <BiasAnalysisDisplay
+                      analysis={article.biasAnalysis}
+                      sources={article.sources}
+                      onSourceSelect={setSelectedSource}
+                      onShowSources={() => setIsSourceListOpen(true)}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* FOOTER ACTION BAR */}
+                  <div className="flex items-center justify-between pt-2">
+                    {/* Left: Date/Live */}
+                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">
+                      {isLive ? (
+                        <div className="flex items-center gap-2 text-red-500">
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+                          </span>
+                          <span>En Direct</span>
+                        </div>
+                      ) : (
+                        <span>{displayDate}</span>
+                      )}
+                    </div>
+
+                    {/* Right: All action buttons grouped */}
+                    <div className="flex items-center gap-1">
+                      {/* AI/Sparkles Button */}
                       <button
                         onClick={(e) => { e.stopPropagation(); onChatOpen(); }}
-                        className="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/5 transition-all duration-300 active:scale-90 text-gray-300 hover:text-white hover:scale-110"
-                        aria-label="Comprendre"
+                        className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-white/5 transition-all duration-300 active:scale-90 text-white/40 hover:text-white"
+                        aria-label="Comprendre avec l'IA"
                       >
                         <SparklesIcon className="w-4 h-4" />
                       </button>
-                      <span className="text-[8px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-white transition-colors duration-200 opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 absolute top-full mt-1 whitespace-nowrap">
-                        Comprendre
-                      </span>
+
+                      {/* ActionButtons (Reactions) */}
+                      <ActionButtons
+                        article={article}
+                        className="gap-1"
+                        minimal={true}
+                      />
                     </div>
-
-                    <div className="h-8 w-px bg-white/10 mx-1"></div>
-
-                    <ActionButtons
-                      article={article}
-                      onShowSentiment={() => setIsSentimentModalOpen(true)}
-                      className="gap-5"
-                      communityStats={communityStats}
-                      minimal={true}
-                    />
                   </div>
                 </div>
-
-                {shareFeedback && (
-                                <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/90 px-4 py-1.5 rounded-full border border-white/10 shadow-xl animate-fade-in">
-                                    <p className="text-[9px] uppercase tracking-[0.2em] text-white font-bold whitespace-nowrap">
-                    {shareFeedback}
-                  </p>
-                                </div>
-                )}
-                        </div>
               </div>
-            </div>
 
-                {/* IMAGE COLUMN (Desktop Only - Right side) */}
-                <div className="hidden md:flex col-span-7 h-full relative items-center justify-center pl-12 pointer-events-auto py-8 md:py-0">
-                    <div className="relative w-full h-full rounded-[32px] overflow-hidden shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] border border-white/10 group transform transition-all duration-700 hover:scale-[1.005]">
-                        <img
-                            src={imageSrc}
-                            alt="Article Poster"
-                            className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-1000 group-hover:scale-105"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-40"></div>
-                    </div>
-                </div>
+              {/* RIGHT COLUMN (IMAGE CARD) - Desktop only */}
+              <div className="hidden lg:flex w-[400px] lg:w-[480px] shrink-0 rounded-[32px] overflow-hidden shadow-[0_50px_100px_-20px_rgba(0,0,0,0.7)] border border-white/10 group transform transition-all duration-700 hover:scale-[1.01] relative h-auto">
+                <img
+                  src={imageSrc}
+                  alt="Article Poster"
+                  className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-1000 group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-40"></div>
+              </div>
 
             </div>
+
+            {shareFeedback && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/90 px-4 py-1.5 rounded-full border border-white/10 shadow-xl animate-fade-in z-[100]">
+                <p className="text-[9px] uppercase tracking-[0.2em] text-white font-bold whitespace-nowrap">
+                  {shareFeedback}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -506,15 +682,6 @@ const NewsCard: React.FC<NewsCardProps> = ({
         <SourceListModal
           sources={article.sources}
           onClose={() => setIsSourceListOpen(false)}
-        />
-      )}
-
-      {isSentimentModalOpen && (
-        <SentimentModal
-          sentiment={article.sentiment}
-          comments={localComments}
-          onAddComment={handleAddComment}
-          onClose={() => setIsSentimentModalOpen(false)}
         />
       )}
 

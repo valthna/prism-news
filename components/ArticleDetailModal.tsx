@@ -1,5 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, ReactNode } from 'react';
 import { NewsArticle } from '../types';
+
+/**
+ * Parse text with **bold** markers and render as React elements
+ */
+const renderFormattedText = (text: string): ReactNode => {
+  if (!text) return null;
+  
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      const boldText = part.slice(2, -2);
+      return (
+        <strong key={index} className="font-semibold text-white">
+          {boldText}
+        </strong>
+      );
+    }
+    return part;
+  });
+};
 
 interface ArticleDetailModalProps {
     article: NewsArticle;
@@ -23,7 +44,7 @@ const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({ article, onClos
     };
 
     return (
-        <div className={`fixed inset-0 z-[100] flex items=end justify-center sm:items-center pointer-events-none`}>
+        <div className={`fixed inset-0 z-[100] flex items-end justify-center sm:items-center pointer-events-none`}>
             <div
                 className={`absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity duration-300 pointer-events-auto ${isVisible ? 'opacity-100' : 'opacity-0'}`}
                 onClick={handleClose}
@@ -74,7 +95,7 @@ const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({ article, onClos
                             L'Essentiel
                         </h3>
                         <p className="text-lg text-gray-200 leading-relaxed font-serif">
-                            {article.summary}
+                            {renderFormattedText(article.summary)}
                         </p>
                     </section>
 
@@ -86,19 +107,19 @@ const ArticleDetailModal: React.FC<ArticleDetailModalProps> = ({ article, onClos
                             Dans le détail
                         </h3>
                         <p className="text-base text-gray-300 leading-relaxed">
-                            {article.detailedSummary || "Analyse détaillée en cours de génération..."}
+                            {renderFormattedText(article.detailedSummary || "Analyse détaillée en cours de génération...")}
                         </p>
                     </section>
 
                     <section className="bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-xl p-5 border border-purple-500/20">
-                        <h3 className="text-sm font-bold uppercase tracking-widest text-purple-400 mb-3 flex items=center gap-2">
+                        <h3 className="text-sm font-bold uppercase tracking-widest text-purple-400 mb-3 flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18" />
                             </svg>
                             Pourquoi c'est important
                         </h3>
                         <p className="text-base text-gray-300 leading-relaxed italic">
-                            {article.importance || "Impact majeur à surveiller."}
+                            {renderFormattedText(article.importance || "Impact majeur à surveiller.")}
                         </p>
                     </section>
                 </div>

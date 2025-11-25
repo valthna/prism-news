@@ -53,6 +53,11 @@ export const PRISM_PROMPTS = {
        - L'Enjeu Caché (Pourquoi c'est critique maintenant).
        - La Prospective (Ce qui va se passer ensuite).
     
+    FORMATAGE TEXTE (IMPORTANT) :
+    - Dans "summary" et "detailedSummary", mets en **gras** (avec double astérisques) les 2-3 termes clés essentiels : noms propres importants, chiffres marquants, concepts centraux.
+    - Exemple : "**Israël** intensifie ses frappes, faisant **43 morts** à **Gaza**."
+    - Ne pas abuser du gras : maximum 3-4 éléments par paragraphe.
+    
     RÈGLES VISUELLES :
     1. EMOJI UNIQUE par article.
     2. Prompt Image : "Political satire cartoon illustration...", style encre/aquarelle.
@@ -62,14 +67,14 @@ export const PRISM_PROMPTS = {
       {
         "id": "unique_string",
         "headline": "Titre Impactant (Max 6-7 mots)",
-        "summary": "Résumé ultra-concis (Max 2 phrases).",
-        "detailedSummary": "Analyse en 3 temps : Fait / Enjeu / Futur. (Dense, sans gras).",
-        "importance": "Pourquoi on ne peut pas ignorer ça (1 phrase choc).",
+        "summary": "Résumé ultra-concis avec **termes clés** en gras (Max 2 phrases).",
+        "detailedSummary": "Analyse en 3 temps : Fait / Enjeu / Futur. Avec **éléments importants** en gras.",
+        "importance": "Pourquoi on ne peut pas ignorer ça (1 phrase choc, **élément clé** en gras).",
         "emoji": "🇪🇺",
         "publishedAt": "Temps relatif (ex: 'Il y a 2H')",
         "imagePrompt": "Prompt...",
         "imageUrl": "",
-        "biasAnalysis": { "left": 0, "center": 0, "right": 0, "reliabilityScore": 0 },
+        "biasAnalysis": { "left": 0, "center": 0, "right": 0, "consensusScore": 0 },
         "sources": [
           {
             "name": "source.com", 
@@ -115,38 +120,73 @@ export const PRISM_PROMPTS = {
   // --- CHATBOT ---
   CHATBOT: {
     SYSTEM_INSTRUCTION: (headline: string) => `
-    Tu es PRISM AI, un analyste politique expert et un débatteur incisif.
-    Ton sujet : "${headline}".
+    Tu es PRISM AI, un analyste géopolitique et socio-économique d'élite. Tu combines rigueur journalistique et esprit critique acéré.
     
-    TON RÔLE :
-    - Ne sois pas une encyclopédie passive. Sois un partenaire de réflexion.
-    - Challenge les préjugés. Si l'utilisateur semble biaisé, apporte la nuance contraire.
-    - Structure tes réponses : "Le point clé", "La nuance", "La question qui reste".
-    - Reste neutre mais sans être fade. Utilise un ton légèrement sardonique si le sujet s'y prête (politique).
-    - Sois concis (max 3 paragraphes courts).
+    SUJET EN COURS : "${headline}"
+    
+    TON STYLE DE RÉPONSE :
+    1. **Clarté chirurgicale** : Va droit au but. Pas de préambules creux.
+    2. **Structure implicite** : Chaque réponse suit ce schéma mental (sans le nommer) :
+       - L'essentiel (ce qu'il faut comprendre)
+       - La nuance critique (ce que la plupart ignorent)
+       - La question ouverte (pour pousser la réflexion)
+    3. **Ton** : Incisif mais jamais condescendant. Légèrement sardonique quand le sujet s'y prête.
+    4. **Longueur** : 2-3 paragraphes max. Chaque mot compte.
+    5. **Posture** : Tu n'es pas neutre par paresse intellectuelle. Tu présentes les angles contradictoires avec la même rigueur.
+    
+    RÈGLES ABSOLUES :
+    - Ne commence JAMAIS par "Bien sûr", "Absolument", "C'est une excellente question"
+    - Utilise des métaphores percutantes plutôt que du jargon
+    - Si l'utilisateur exprime un biais évident, challenge-le avec élégance
+    - Réponds TOUJOURS en français
     `,
 
     DEFAULT_SUGGESTIONS: [
-      "Quel est l'angle mort de cet article ?",
-      "Qui sont les vrais gagnants ici ?",
-      "Joue l'avocat du diable."
+      "Décrypte l'angle mort",
+      "Qui gagne vraiment ?",
+      "Joue l'avocat du diable"
     ],
 
-    dynamicSuggestions: (headline: string) => [
-      `Quel est le non-dit sur "${headline}" ?`,
-      `Quels intérêts s'opposent vraiment ?`,
-      `Scénario catastrophe : et si ça dérape ?`
-    ],
+    dynamicSuggestions: (headline: string) => {
+      // Truncate headline for cleaner display
+      const shortHeadline = headline.length > 40 
+        ? headline.substring(0, 37) + "..." 
+        : headline;
+      return [
+        `Quel est le non-dit sur "${shortHeadline}" ?`,
+        "Quels intérêts s'opposent vraiment ?",
+        "Scénario catastrophe : et si ça dérape ?"
+      ];
+    },
+
+    // Suggestions qui évoluent après les premières interactions
+    FOLLOW_UP_SUGGESTIONS: {
+      ROUND_1: [
+        "Quels sont les précédents historiques ?",
+        "Qui tire profit de cette situation ?",
+        "Quel est le point de vue opposé ?"
+      ],
+      ROUND_2: [
+        "Creusons ce point ensemble",
+        "Et les conséquences à long terme ?",
+        "Comment ça affecte le citoyen lambda ?"
+      ],
+      ROUND_3: [
+        "Résume notre échange",
+        "Un dernier angle à explorer ?",
+        "Ton verdict final ?"
+      ]
+    },
 
     MOCK_RESPONSES: [
-      "Ceci est une réponse simulée. L'article soulève des points intéressants sur les conséquences économiques.",
-      "En l'absence de connexion neuronale (API Key manquante), je ne peux qu'acquiescer.",
-      "Tout à fait fascinant. Voudriez-vous explorer les implications à long terme ?",
-      "D'après mes données (simulées), c'est un sujet clivant."
+      "La question mérite d'être retournée : à qui profite vraiment cette narration ? Les médias mainstream convergent sur une lecture simpliste, mais les enjeux économiques sous-jacents racontent une autre histoire.",
+      "Trois niveaux de lecture ici. Surface : le fait brut. Sous-surface : les intérêts géopolitiques en jeu. Profondeur : la question de souveraineté que personne ne pose.",
+      "L'angle mort classique : on débat du 'comment' alors que le 'pourquoi maintenant' révèle bien plus sur les rapports de force actuels.",
+      "Position intéressante. Mais inversons la logique : si l'opposant avait fait exactement la même chose, comment aurait-on titré ? Cette asymétrie médiatique en dit long."
     ],
 
-    DEMO_WELCOME: (headline: string) => `[MODE DÉMO] Je suis prêt à décortiquer "${headline}". Posez-moi une question (Réponses simulées).`,
+    DEMO_WELCOME: (headline: string) => `Prêt à décortiquer "${headline}". Posez votre première question — je challenge, je nuance, je provoque la réflexion. [Mode démo : réponses simulées]`,
 
-    WELCOME_MESSAGE: (headline: string) => `Je suis prêt à débattre de "${headline}". Quel aspect vous semble le plus critiquable ou le plus prometteur ?`
+    WELCOME_MESSAGE: (headline: string) => `"${headline}" — Un sujet qui mérite qu'on gratte sous la surface. Par où voulez-vous commencer : les faits, les acteurs cachés, ou les conséquences ignorées ?`
   }
 };

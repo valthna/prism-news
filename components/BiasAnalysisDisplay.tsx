@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { BiasAnalysis, Source } from '../types';
+import { getMediaOwner, getAllOwnerGroups, type MediaOwnerInfo } from '../constants/mediaOwners';
 
 const getDomainFromUrl = (rawUrl?: string): string | undefined => {
     if (!rawUrl) {
@@ -51,13 +52,35 @@ interface BiasAnalysisDisplayProps {
 const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sources, onSourceSelect, onShowSources, className = "", mobileReliabilitySlot }) => {
     const [hoveredSourceId, setHoveredSourceId] = useState<string | null>(null);
 
+    // Filtrer pour n'afficher que les sources vérifiées (qui ont réellement traité le sujet)
+    // Détecte aussi les sources "amplifiées" par leurs coverageSummary génériques
+    const verifiedSources = useMemo(() => {
+        // Patterns typiques des sources amplifiées (générées automatiquement)
+        const genericPatterns = [
+            /^(décryptage|perspective|contre-enquête|couverture|synthèse|fil d'actualité|lecture|traitement|données|étude|position)/i,
+            /\b(par le monde|du guardian|de mediapart|de libération|de l'humanité|de vox|de reuters|associated press|de l'afp|bbc de|de politico|d'axios|par le figaro|du wall street journal|de les échos|the economist|de fox news|new york post|de l'oms|de la banque mondiale|de l'ocde|de l'onu)\b/i,
+            / (sur|autour de|concernant|appliquée? à|liée? à|au sujet de|portant sur|consacrée? à) .{5,}\.$/i
+        ];
+        
+        return sources.filter(s => {
+            // Si explicitement marqué comme non vérifié, filtrer
+            if (s.isVerified === false) return false;
+            // Si explicitement marqué comme vérifié, garder
+            if (s.isVerified === true) return true;
+            // Pour les anciennes données sans le champ, détecter les patterns génériques
+            const summary = s.coverageSummary || '';
+            const isGeneric = genericPatterns.some(pattern => pattern.test(summary));
+            return !isGeneric;
+        });
+    }, [sources]);
+
     const positionedSources = useMemo(() => {
-        let items = sources.map(s => ({
+        let items = verifiedSources.map(s => ({
             ...s,
             displayPosition: s.position,
         }));
 
-        const BUBBLE_DIAMETER = 10;
+        const BUBBLE_DIAMETER = 12;
         items.sort((a, b) => a.displayPosition - b.displayPosition);
 
         for (let i = 0; i < 5; i++) {
@@ -73,15 +96,15 @@ const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sou
             ...i,
             displayPosition: Math.max(5, Math.min(95, i.displayPosition))
         }));
-    }, [sources]);
+    }, [verifiedSources]);
 
     return (
         <div className={`flex flex-col h-full justify-center ${className}`}>
             <div className="flex items-center justify-between gap-3 w-full">
                 {/* Left side: Source count & Verification badge */}
                 <div className="flex flex-col gap-0.5 shrink-0">
-                     <button onClick={onShowSources} className="text-[9px] font-bold uppercase tracking-widest text-gray-300 hover:text-white transition-colors text-left">
-                        {sources.length} Sources
+                    <button onClick={onShowSources} className="text-[9px] font-bold uppercase tracking-widest text-gray-300 hover:text-white transition-colors text-left">
+                        {verifiedSources.length} Sources
                     </button>
                     <div className="group relative flex items-center gap-1 cursor-help w-fit">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-green-400/80 group-hover:text-green-400 transition-colors">
@@ -92,17 +115,18 @@ const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sou
                 </div>
 
                 {/* Right side: Spectrum Analysis */}
-                <div className="flex-1 relative h-6 select-none mt-1">
-                    <div className="absolute top-1/2 left-0 right-0 h-1.5 bg-gradient-to-r from-bias-left via-bias-center to-bias-right rounded-full opacity-90 -translate-y-1/2 shadow-inner flex justify-between items-center px-1">
-                        <span className="text-[5px] font-black text-white/90 uppercase tracking-widest z-0">Gauche</span>
-                        <span className="text-[5px] font-black text-white/90 uppercase tracking-widest z-0">Droite</span>
+                <div className="flex-1 relative h-10 select-none mt-1">
+                    <div className="absolute top-1/2 left-0 right-0 h-2.5 bg-gradient-to-r from-blue-500/40 via-purple-500/30 to-red-500/40 rounded-full opacity-90 -translate-y-1/2 shadow-inner flex justify-between items-center px-2 border border-white/10">
+                        <span className="text-[7px] font-black text-white/70 uppercase tracking-widest z-0">Gauche</span>
+                        <span className="text-[7px] font-black text-white/70 uppercase tracking-widest z-0">Droite</span>
                     </div>
-                    <div className="absolute top-1/2 left-1/2 w-px h-2.5 bg-white/60 -translate-y-1/2 -translate-x-1/2 z-0"></div>
+                    <div className="absolute top-1/2 left-1/2 w-px h-3.5 bg-white/50 -translate-y-1/2 -translate-x-1/2 z-0"></div>
 
                     {positionedSources.map((source) => {
                         const fallbackDomain = getFallbackDomain(source);
                         const googleFavicon = `https://www.google.com/s2/favicons?domain=${fallbackDomain}&sz=64`;
                         const isHovered = hoveredSourceId === source.name;
+                        const ownerInfo = getMediaOwner(source.name);
 
                         return (
                             <div
@@ -115,9 +139,11 @@ const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sou
                             >
                                 <button
                                     onClick={(e) => { e.stopPropagation(); onSourceSelect(source); }}
-                                    className={`relative w-6 h-6 rounded-full bg-[#1c1c1e] border-[0.5px] flex items-center justify-center overflow-hidden shadow-sm transition-all duration-300 hover:scale-125 hover:z-30 ${source.bias === 'left' ? 'border-bias-left' :
-                                        source.bias === 'right' ? 'border-bias-right' : 'border-bias-center'
-                                        }`}
+                                    className="relative w-8 h-8 rounded-full bg-[#1c1c1e] flex items-center justify-center overflow-hidden shadow-lg transition-all duration-300 hover:scale-125 hover:z-30"
+                                    style={{ 
+                                        border: `2.5px solid ${ownerInfo.color}`,
+                                        boxShadow: `0 0 12px ${ownerInfo.color}50`
+                                    }}
                                 >
                                     <img
                                         src={source.logoUrl}
@@ -136,16 +162,24 @@ const BiasAnalysisDisplay: React.FC<BiasAnalysisDisplayProps> = ({ analysis, sou
                                     />
                                 </button>
 
-                                {/* Tooltip */}
+                                {/* Tooltip avec info propriétaire */}
                                 <div className={`
                                     absolute bottom-full mb-2 left-1/2 -translate-x-1/2 
                                     bg-black/90 backdrop-blur-md border border-white/10 
-                                    px-2 py-1 rounded-lg shadow-xl
+                                    px-2.5 py-1.5 rounded-lg shadow-xl
                                     text-[9px] font-bold text-white whitespace-nowrap 
                                     transition-all duration-200 pointer-events-none z-40
                                     ${isHovered ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95'}
                                 `}>
-                                    {source.name}
+                                    <div className="flex flex-col gap-0.5">
+                                        <span>{source.name}</span>
+                                        <span 
+                                            className="text-[7px] font-medium opacity-80"
+                                            style={{ color: ownerInfo.color }}
+                                        >
+                                            {ownerInfo.label}
+                                        </span>
+                                    </div>
                                     <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-black/90 border-r border-b border-white/10 transform rotate-45"></div>
                                 </div>
                             </div>

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { Source } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
+import { getMediaOwner, getAllOwnerGroups, type MediaOwnerInfo } from '../constants/mediaOwners';
 
 interface SourceListModalProps {
   sources: Source[];
@@ -8,6 +9,31 @@ interface SourceListModalProps {
 }
 
 const SourceListModal: React.FC<SourceListModalProps> = ({ sources, onClose }) => {
+  const [isLegendOpen, setIsLegendOpen] = useState(false);
+  const ownerGroups = getAllOwnerGroups();
+
+  // Filtrer pour n'afficher que les sources vérifiées (qui ont réellement traité le sujet)
+  // Détecte aussi les sources "amplifiées" par leurs coverageSummary génériques
+  const verifiedSources = useMemo(() => {
+    // Patterns typiques des sources amplifiées (générées automatiquement)
+    const genericPatterns = [
+      /^(décryptage|perspective|contre-enquête|couverture|synthèse|fil d'actualité|lecture|traitement|données|étude|position)/i,
+      /\b(par le monde|du guardian|de mediapart|de libération|de l'humanité|de vox|de reuters|associated press|de l'afp|bbc de|de politico|d'axios|par le figaro|du wall street journal|de les échos|the economist|de fox news|new york post|de l'oms|de la banque mondiale|de l'ocde|de l'onu)\b/i,
+      / (sur|autour de|concernant|appliquée? à|liée? à|au sujet de|portant sur|consacrée? à) .{5,}\.$/i
+    ];
+    
+    return sources.filter(s => {
+      // Si explicitement marqué comme non vérifié, filtrer
+      if (s.isVerified === false) return false;
+      // Si explicitement marqué comme vérifié, garder
+      if (s.isVerified === true) return true;
+      // Pour les anciennes données sans le champ, détecter les patterns génériques
+      const summary = s.coverageSummary || '';
+      const isGeneric = genericPatterns.some(pattern => pattern.test(summary));
+      return !isGeneric;
+    });
+  }, [sources]);
+
   const getBiasColor = (bias: string) => {
     switch (bias) {
       case 'left': return 'text-bias-left border-bias-left/30 bg-bias-left/10';
@@ -75,6 +101,16 @@ const SourceListModal: React.FC<SourceListModalProps> = ({ sources, onClose }) =
                 </ul>
               </div>
             </div>
+            {/* Owner Legend Button */}
+            <button
+              onClick={() => setIsLegendOpen(!isLegendOpen)}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all ${isLegendOpen ? 'bg-white/15 border-white/30' : 'bg-purple-500/10 border-purple-500/30 hover:bg-purple-500/20'}`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-2.5 h-2.5 text-purple-400">
+                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 01-1.581.814L10 14.429l-4.419 2.385A1 1 0 014 16V4zm2-1a1 1 0 00-1 1v10.566l3.723-2.01a1 1 0 01.554 0L13 14.566V4a1 1 0 00-1-1H6z" clipRule="evenodd" />
+              </svg>
+              <span className="text-[7px] font-bold text-purple-400 uppercase tracking-widest">Proprio.</span>
+            </button>
           </div>
           <button
             onClick={onClose}
@@ -85,15 +121,43 @@ const SourceListModal: React.FC<SourceListModalProps> = ({ sources, onClose }) =
           </button>
         </header>
 
+        {/* Owner Legend Panel */}
+        <div className={`flex-shrink-0 overflow-hidden transition-all duration-300 ${isLegendOpen ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'}`}>
+          <div className="px-5 py-4 bg-gradient-to-b from-purple-500/5 to-transparent border-b border-white/5">
+            <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Propriétaires des médias</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {ownerGroups.map((owner) => (
+                <div key={owner.group} className="flex items-center gap-2">
+                  <div 
+                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: owner.color, boxShadow: `0 0 6px ${owner.color}60` }}
+                  />
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-semibold text-white block truncate">{owner.label}</span>
+                    <span className="text-[8px] text-gray-500 block truncate">{owner.description}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
         <div className="flex-grow overflow-y-auto p-5 space-y-4 custom-scrollbar bg-[#0a0a0a]">
-          {sources.map((source) => {
+          {verifiedSources.map((source) => {
             // Helper for fallback URL
             const domainName = source.name.toLowerCase().replace(/\s+/g, '');
             const googleFavicon = `https://www.google.com/s2/favicons?domain=${domainName}.com&sz=128`;
+            const ownerInfo = getMediaOwner(source.name);
 
             return (
               <div key={source.name} className="bg-white/5 p-4 rounded-2xl flex items-start gap-4 border border-white/5 hover:border-white/20 transition-all group">
-                <div className="w-12 h-12 bg-white rounded-xl p-1 flex-shrink-0 flex items-center justify-center overflow-hidden relative shadow-md">
+                <div 
+                  className="w-12 h-12 bg-white rounded-xl p-1 flex-shrink-0 flex items-center justify-center overflow-hidden relative shadow-md"
+                  style={{ 
+                    border: `2.5px solid ${ownerInfo.color}`,
+                    boxShadow: `0 0 12px ${ownerInfo.color}50`
+                  }}
+                >
                   <img
                     src={source.logoUrl}
                     alt={`Logo de ${source.name}`}
@@ -113,11 +177,33 @@ const SourceListModal: React.FC<SourceListModalProps> = ({ sources, onClose }) =
                   </div>
                 </div>
                 <div className="flex-grow min-w-0">
-                  <div className="flex justify-between items-center mb-1">
+                  <div className="flex flex-wrap justify-between items-center gap-2 mb-1">
                     <h3 className="font-bold text-base truncate text-white group-hover:text-neon-accent transition-colors">{source.name}</h3>
-                    <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border ${getBiasColor(source.bias)}`}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                      <span className="text-[9px] font-bold uppercase tracking-widest">{translateBias(source.bias)}</span>
+                    <div className="flex items-center gap-2">
+                      {/* Owner Badge */}
+                      <div 
+                        className="flex items-center gap-1.5 px-2 py-0.5 rounded-full border"
+                        style={{ 
+                          borderColor: `${ownerInfo.color}50`,
+                          backgroundColor: `${ownerInfo.color}15`
+                        }}
+                      >
+                        <span 
+                          className="w-1.5 h-1.5 rounded-full"
+                          style={{ backgroundColor: ownerInfo.color }}
+                        />
+                        <span 
+                          className="text-[8px] font-bold uppercase tracking-widest"
+                          style={{ color: ownerInfo.color }}
+                        >
+                          {ownerInfo.label}
+                        </span>
+                      </div>
+                      {/* Bias Badge */}
+                      <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border ${getBiasColor(source.bias)}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                        <span className="text-[9px] font-bold uppercase tracking-widest">{translateBias(source.bias)}</span>
+                      </div>
                     </div>
                   </div>
                   <p className="text-gray-400 text-xs leading-relaxed line-clamp-2 mb-2.5">{source.coverageSummary}</p>

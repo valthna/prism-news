@@ -2,25 +2,65 @@ import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 // import FirecrawlApp from 'firecrawl'; // SDK retiré pour compatibilité navigateur
 import { Bias, NewsArticle, Sentiment, Source, UserComment } from '../types';
 import { getImagenService, SUPABASE_IMAGE_BUCKET, isImagenServiceEnabled } from './imagenService';
-import { supabase } from './supabaseClient';
+import { supabase, SUPABASE_URL } from './supabaseClient';
 import { PRISM_PROMPTS } from './prompts';
 import { progressTracker } from './progressTracker';
+import { recordGeminiUsage } from './aiUsageLogger';
 
 console.log("GeminiService Module Loaded");
 
 const TILE_RETENTION_MS = 2 * 24 * 60 * 60 * 1000; // 2 jours
 const MINIMUM_REUSABLE_TILES = 4;
 const TILE_PIPELINE_VERSION = 'g3-image-preview-v1';
-const bucketPublicBaseUrl = process.env.SUPABASE_URL
-  ? `${process.env.SUPABASE_URL}/storage/v1/object/public/${SUPABASE_IMAGE_BUCKET}/`
+const bucketPublicBaseUrl = SUPABASE_URL
+  ? `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_IMAGE_BUCKET}/`
   : null;
 
 const SUPABASE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 heures
 const LOCAL_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const RATE_LIMIT_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 const LOCAL_CACHE_PREFIX = 'prism-cache:';
-const GEMINI_TIMEOUT_MS = 120 * 1000; // AUGMENTÉ : 120s pour laisser le temps à Gemini 2.0 et aux images
+const GEMINI_TIMEOUT_STANDARD_MS = 180 * 1000; // 3 min par défaut pour absorber les prompts enrichis
+const GEMINI_TIMEOUT_THINKING_MS = 300 * 1000; // 5 min pour Gemini 3 (mode thinking HIGH)
 const truthyEnvValues = new Set(['1', 'true', 'yes', 'on']);
+
+const isNetworkFailure = (error: unknown): boolean => {
+  if (!error) return false;
+  if (error instanceof TypeError) return true;
+  const extractMessage = (value: unknown): string | undefined => {
+    if (!value) return undefined;
+    if (typeof value === 'string') return value;
+    if (value instanceof Error) return value.message;
+    const maybeObject = value as Record<string, unknown>;
+    return (typeof maybeObject?.message === 'string'
+      ? maybeObject.message as string
+      : typeof maybeObject?.details === 'string'
+        ? maybeObject.details as string
+        : undefined);
+  };
+  const message = extractMessage(error);
+  return typeof message === 'string' && /failed to fetch|network\s?error|TypeError/i.test(message);
+};
+
+let supabaseDisabledReason: string | null = null;
+
+const isSupabaseActive = (): boolean => Boolean(supabase) && !supabaseDisabledReason;
+
+const disableSupabaseForSession = (context: string, error?: unknown) => {
+  if (supabaseDisabledReason) {
+    return;
+  }
+  supabaseDisabledReason = context;
+  console.warn(`[PRISM] Supabase désactivé pour cette session (${context}).`);
+  if (error) {
+    console.warn(error);
+  }
+};
+
+const resolveGeminiTimeout = (modelName: string): number =>
+  modelName?.toLowerCase().includes('gemini-3')
+    ? GEMINI_TIMEOUT_THINKING_MS
+    : GEMINI_TIMEOUT_STANDARD_MS;
 
 const MIN_ARTICLES = 10;
 const MIN_SOURCES_PER_ARTICLE = 5;
@@ -152,6 +192,7 @@ const buildBiasPriorityQueue = (sources: Source[]): Bias[] => {
 };
 
 const ensureSourceFloor = (headline: string, summary: string, initialSources: Source[]): Source[] => {
+  // Sources réelles marquées comme vérifiées
   const deduped = dedupeSources(
     initialSources.map((source) => {
       const bias = sanitizeBias(source.bias);
@@ -161,7 +202,8 @@ const ensureSourceFloor = (headline: string, summary: string, initialSources: So
         position: typeof source.position === 'number' ? source.position : defaultPositionByBias[bias],
         coverageSummary: enrichCoverageSummary(source.coverageSummary, source.name, headline, summary),
         logoUrl: source.logoUrl || createLogoUrl(source.name),
-        url: source.url || createGoogleSearchUrl(headline, source.name)
+        url: source.url || createGoogleSearchUrl(headline, source.name),
+        isVerified: true // Source réelle qui a couvert le sujet
       };
     })
   );
@@ -173,6 +215,7 @@ const ensureSourceFloor = (headline: string, summary: string, initialSources: So
   const biasQueue = buildBiasPriorityQueue(deduped);
   let attempts = 0;
 
+  // Sources amplifiées (génériques) marquées comme non vérifiées
   while (deduped.length < target && attempts < 40) {
     const bias = biasQueue[attempts % biasQueue.length];
     const candidates = curatedSourcePool[bias] || [];
@@ -184,7 +227,8 @@ const ensureSourceFloor = (headline: string, summary: string, initialSources: So
         position: candidate.position,
         logoUrl: createLogoUrl(candidate.name),
         coverageSummary: candidate.defaultSummary.replace('{topic}', summary || headline),
-        url: createGoogleSearchUrl(headline, candidate.name)
+        url: createGoogleSearchUrl(headline, candidate.name),
+        isVerified: false // Source amplifiée - n'a pas forcément couvert ce sujet
       });
       usedNames.add(normalizeSourceName(candidate.name));
     }
@@ -203,7 +247,8 @@ const ensureSourceFloor = (headline: string, summary: string, initialSources: So
           position: candidate.position,
           logoUrl: createLogoUrl(candidate.name),
           coverageSummary: candidate.defaultSummary.replace('{topic}', summary || headline),
-          url: createGoogleSearchUrl(headline, candidate.name)
+          url: createGoogleSearchUrl(headline, candidate.name),
+          isVerified: false // Source amplifiée
         });
         usedNames.add(normalizeSourceName(candidate.name));
       }
@@ -259,23 +304,12 @@ const hydrateRawSource = (rawSource: any, headline: string, summary: string): So
 };
 
 const ensureMinimumArticleCount = (articles: NewsArticle[]): NewsArticle[] => {
-  if (articles.length >= MIN_ARTICLES) {
-    return articles;
+  // On retourne les articles tels quels - pas de padding avec des mock data
+  // Si on n'a pas assez d'articles, on accepte ce qu'on a
+  if (articles.length < MIN_ARTICLES) {
+    console.log(`[PRISM] Only ${articles.length} articles available (minimum: ${MIN_ARTICLES})`);
   }
-
-  const fallbackPool = buildStrategicFallbackArticles();
-  const usedHeadlines = new Set(articles.map((article) => article.headline));
-  const needed = MIN_ARTICLES - articles.length;
-  const additions: NewsArticle[] = [];
-
-  for (const fallback of fallbackPool) {
-    if (additions.length >= needed) break;
-    if (usedHeadlines.has(fallback.headline)) continue;
-    additions.push(fallback);
-    usedHeadlines.add(fallback.headline);
-  }
-
-  return sortArticlesBySourceRichness([...articles, ...additions]);
+  return sortArticlesBySourceRichness(articles);
 };
 
 type LocalCachePayload = {
@@ -582,11 +616,15 @@ const saveLocalCache = (cacheKey: string, articles: NewsArticle[]): void => {
 };
 
 const fetchSupabaseCache = async (cacheKey: string, maxAgeMs: number): Promise<NewsArticle[] | null> => {
-  if (!supabase) {
+  if (!isSupabaseActive()) {
     return null;
   }
+
+  const client = supabase;
+  if (!client) return null;
+
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('news_cache')
       .select('articles, created_at')
       .eq('search_key', cacheKey)
@@ -596,6 +634,9 @@ const fetchSupabaseCache = async (cacheKey: string, maxAgeMs: number): Promise<N
 
     if (error) {
       console.warn("[PRISM] Cache check failed:", error);
+      if (isNetworkFailure(error)) {
+        disableSupabaseForSession('cache-read', error);
+      }
       return null;
     }
 
@@ -605,6 +646,9 @@ const fetchSupabaseCache = async (cacheKey: string, maxAgeMs: number): Promise<N
     }
   } catch (err) {
     console.warn("[PRISM] Cache check failed:", err);
+    if (isNetworkFailure(err)) {
+      disableSupabaseForSession('cache-read', err);
+    }
   }
   return null;
 };
@@ -644,43 +688,50 @@ const getStoragePathFromUrl = (imageUrl?: string | null): string | null => {
 };
 
 const persistTilesToRepository = async (articles: NewsArticle[], cacheKey: string) => {
-  if (!supabase || articles.length === 0) {
-    console.warn("[PRISM] Supabase indisponible pour news_tiles. Le cache persistant est désactivé.");
-    return;
+  if (articles.length === 0) {
+    throw new Error("Aucun article à persister.");
   }
-  try {
-    // Batching pour éviter le timeout sur payload trop lourd (Base64)
-    const BATCH_SIZE = 2;
-    for (let i = 0; i < articles.length; i += BATCH_SIZE) {
-        const batch = articles.slice(i, i + BATCH_SIZE);
-        const payload = batch.map((article) => ({
-          article_id: article.id,
-          search_key: cacheKey,
-          article,
-          image_storage_path: getStoragePathFromUrl(article.imageUrl),
-        }));
-        
-        const { error } = await supabase
-          .from('news_tiles')
-          .upsert(payload, { onConflict: 'article_id' });
+  const client = supabase;
+  if (!client || !isSupabaseActive()) {
+    throw new Error("Supabase indisponible pour persister les tuiles.");
+  }
 
-        if (error) {
-          console.warn(`[PRISM] Échec upsert news_tiles (batch ${i}):`, error);
-        }
+  // Batching pour éviter le timeout sur payload trop lourd (Base64)
+  const BATCH_SIZE = 2;
+  for (let i = 0; i < articles.length; i += BATCH_SIZE) {
+    const batch = articles.slice(i, i + BATCH_SIZE);
+    const payload = batch.map((article) => ({
+      article_id: article.id,
+      search_key: cacheKey,
+      article,
+      image_storage_path: getStoragePathFromUrl(article.imageUrl),
+    }));
+    
+    const { error } = await client
+      .from('news_tiles')
+      .upsert(payload, { onConflict: 'article_id' });
+
+    if (error) {
+      if (isNetworkFailure(error)) {
+        disableSupabaseForSession('news_tiles upsert', error);
+      }
+      throw new Error(`[PRISM] Échec upsert news_tiles (batch ${i}): ${error.message || error}`);
     }
-    console.log(`[PRISM] Persisted ${articles.length} tiles for key: ${cacheKey}`);
-  } catch (error) {
-    console.warn("[PRISM] Failed to persist tiles:", error);
   }
+
+  console.log(`[PRISM] Persisted ${articles.length} tiles for key: ${cacheKey}`);
 };
 
 const fetchTilesFromRepository = async (cacheKey: string): Promise<NewsArticle[] | null> => {
-  if (!supabase) {
+  if (!isSupabaseActive()) {
     return null;
   }
+  const client = supabase;
+  if (!client) return null;
+
   try {
     const cutoffIso = new Date(Date.now() - TILE_RETENTION_MS).toISOString();
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('news_tiles')
       .select('article')
       .eq('search_key', cacheKey)
@@ -690,6 +741,9 @@ const fetchTilesFromRepository = async (cacheKey: string): Promise<NewsArticle[]
 
     if (error) {
       console.warn("[PRISM] Failed to fetch tiles from repository:", error);
+      if (isNetworkFailure(error)) {
+        disableSupabaseForSession('tiles-read', error);
+      }
       return null;
     }
 
@@ -702,23 +756,117 @@ const fetchTilesFromRepository = async (cacheKey: string): Promise<NewsArticle[]
     return articles;
   } catch (error) {
     console.warn("[PRISM] Unexpected error while reusing tiles:", error);
+    if (isNetworkFailure(error)) {
+      disableSupabaseForSession('tiles-read', error);
+    }
+    return null;
+  }
+};
+
+/**
+ * Parse une chaîne "Il y a X min/H/jour" en minutes pour le tri
+ */
+const parsePublishedAtToMinutes = (publishedAt?: string): number => {
+  if (!publishedAt) return Infinity; // Articles sans date en dernier
+  
+  const text = publishedAt.toLowerCase().trim();
+  
+  // En direct = le plus récent
+  if (text.includes('direct') || text.includes('live')) return 0;
+  
+  // Patterns: "il y a X min", "il y a XH", "il y a X jour(s)", "il y a X heure(s)"
+  const minuteMatch = text.match(/(\d+)\s*min/);
+  if (minuteMatch) return parseInt(minuteMatch[1], 10);
+  
+  const hourMatch = text.match(/(\d+)\s*h/);
+  if (hourMatch) return parseInt(hourMatch[1], 10) * 60;
+  
+  const dayMatch = text.match(/(\d+)\s*jour/);
+  if (dayMatch) return parseInt(dayMatch[1], 10) * 60 * 24;
+  
+  // "Récent" ou autres = assez récent
+  if (text.includes('récent')) return 30;
+  
+  return Infinity; // Inconnu = en dernier
+};
+
+/**
+ * Trie les articles du plus récent au plus ancien basé sur publishedAt
+ */
+const sortArticlesByRecency = (articles: NewsArticle[]): NewsArticle[] => {
+  return [...articles].sort((a, b) => {
+    const aMinutes = parsePublishedAtToMinutes(a.publishedAt);
+    const bMinutes = parsePublishedAtToMinutes(b.publishedAt);
+    return aMinutes - bMinutes; // Plus petit = plus récent = en premier
+  });
+};
+
+/**
+ * Fallback: Récupère les derniers articles depuis la base de données
+ * sans filtrer par search_key - utilisé quand tout le reste échoue
+ */
+const fetchLatestArticlesFromDatabase = async (limit: number = MIN_ARTICLES): Promise<NewsArticle[] | null> => {
+  if (!isSupabaseActive()) {
+    console.log("[PRISM] Supabase inactive, cannot fetch latest articles");
+    return null;
+  }
+  const client = supabase;
+  if (!client) return null;
+
+  try {
+    console.log("[PRISM 🔄] Fetching latest articles from database as fallback...");
+    const { data, error } = await client
+      .from('news_tiles')
+      .select('article')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.warn("[PRISM] Failed to fetch latest articles:", error);
+      if (isNetworkFailure(error)) {
+        disableSupabaseForSession('fallback-read', error);
+      }
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      console.log("[PRISM] No articles found in database");
+      return null;
+    }
+
+    const articles = data.map((row) => row.article as NewsArticle);
+    // Tri par fraîcheur (publishedAt) - du plus récent au plus ancien
+    const sortedArticles = sortArticlesByRecency(articles);
+    console.log(`[PRISM ✅] Fallback: Retrieved ${sortedArticles.length} latest articles from database (sorted by recency)`);
+    return sortedArticles;
+  } catch (error) {
+    console.warn("[PRISM] Unexpected error fetching latest articles:", error);
+    if (isNetworkFailure(error)) {
+      disableSupabaseForSession('fallback-read', error);
+    }
     return null;
   }
 };
 
 const cleanupExpiredTiles = async () => {
-  if (!supabase) {
+  if (!isSupabaseActive()) {
     return;
   }
+  const client = supabase;
+  if (!client) return;
+
   try {
     const cutoffIso = new Date(Date.now() - TILE_RETENTION_MS).toISOString();
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('news_tiles')
       .select('article_id, image_storage_path, article')
       .lt('created_at', cutoffIso);
 
     if (error) {
       console.warn("[PRISM] Failed to fetch stale tiles:", error);
+      if (isNetworkFailure(error)) {
+        disableSupabaseForSession('cleanup-fetch', error);
+      }
       return;
     }
 
@@ -729,12 +877,16 @@ const cleanupExpiredTiles = async () => {
     const articleIds = data.map((row) => row.article_id).filter(Boolean);
 
     if (articleIds.length > 0) {
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await client
         .from('news_tiles')
         .delete()
         .in('article_id', articleIds);
       if (deleteError) {
         console.warn("[PRISM] Failed to delete stale tiles:", deleteError);
+        if (isNetworkFailure(deleteError)) {
+          disableSupabaseForSession('cleanup-delete', deleteError);
+          return;
+        }
       }
     }
 
@@ -748,16 +900,22 @@ const cleanupExpiredTiles = async () => {
 
     if (storagePaths.length > 0) {
       const uniquePaths = Array.from(new Set(storagePaths));
-      const { error: storageError } = await supabase
+      const { error: storageError } = await client
         .storage
         .from(SUPABASE_IMAGE_BUCKET)
         .remove(uniquePaths);
       if (storageError) {
         console.warn("[PRISM] Failed to cleanup storage objects:", storageError);
+        if (isNetworkFailure(storageError)) {
+          disableSupabaseForSession('storage-cleanup', storageError);
+        }
       }
     }
   } catch (error) {
     console.warn("[PRISM] Unexpected error during tile cleanup:", error);
+    if (isNetworkFailure(error)) {
+      disableSupabaseForSession('cleanup', error);
+    }
   }
 };
 
@@ -846,33 +1004,25 @@ const calculateReliability = (sources: Source[]): number => {
   return Math.min(98, Math.max(15, Math.round(score)));
 };
 
-type StrategicTopicBlueprint = {
-  id: string;
-  emoji: string;
-  category: string;
-  headline: string;
-  summary: string;
-  detailedSummary: string;
-  importance: string;
-  sentiment: Sentiment;
-  publishedAt: string;
-  biasAnalysis: {
-    left: number;
-    center: number;
-    right: number;
-  };
-  sources: Array<{
-    name: string;
-    bias: Bias;
-    position: number;
-    coverageSummary: string;
-  }>;
-};
+// Mock data supprimés - fallback vers la base de données
+// Voir fetchLatestArticlesFromDatabase() pour le fallback
 
-const STRATEGIC_TOPIC_BLUEPRINTS: StrategicTopicBlueprint[] = [
-  {
-    id: 'transition-energetique-juste',
-    emoji: '⚡️',
+const _MOCK_DATA_REMOVED = true; // Marker pour éviter les erreurs de référence
+
+/*
+ * MOCK DATA SUPPRIMÉES
+ * Le fallback utilise maintenant fetchLatestArticlesFromDatabase()
+ * 
+ * Ancien contenu (~300 lignes de données statiques) supprimé.
+ * Catégories couvertes: Transition énergétique, IA, Santé, Agriculture, 
+ * Cybersécurité, Mobilités, Finance durable, Climat, Logement, Numérique
+ */
+
+// Placeholder pour éviter les erreurs de parsing lors de la suppression
+const __MOCK_DATA_PLACEHOLDER__ = "REMOVED";
+
+/*
+MOCK_START__
     category: 'Transition énergétique',
     headline: "Transition énergétique : la justice sociale en première ligne",
     summary: "Les plans européens de décarbonation intègrent désormais des filets sociaux plus ambitieux pour financer le basculement vers l'électrification.",
@@ -1138,7 +1288,7 @@ const buildStrategicFallbackArticles = (): NewsArticle[] =>
         left: topic.biasAnalysis.left,
         center: topic.biasAnalysis.center,
         right: topic.biasAnalysis.right,
-        reliabilityScore: calculateReliability(reliabilitySources)
+        consensusScore: calculateReliability(reliabilitySources)
       },
       sources: amplifiedSources,
       sentiment: topic.sentiment,
@@ -1149,8 +1299,7 @@ const buildStrategicFallbackArticles = (): NewsArticle[] =>
     return {
       ...baseArticle,
       imagePrompt: buildTileBackgroundPrompt(baseArticle)
-    };
-  });
+__MOCK_END */
 
 const fetchNewsArticles = async (query?: string, category?: string, forceRefresh = false): Promise<NewsArticle[]> => {
   console.log('[PRISM 🚀] fetchNewsArticles CALLED', { query, category });
@@ -1171,8 +1320,13 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
   const cacheKey = `${baseCacheKey}|${TILE_PIPELINE_VERSION}`;
 
   if (FORCE_MOCK_DATA) {
-    console.warn("[PRISM] MODE MOCK activé (FORCE_MOCK_DATA). Utilisation des données stratégiques locales.");
-    return buildStrategicFallbackArticles();
+    console.warn("[PRISM] MODE MOCK activé (FORCE_MOCK_DATA). Tentative de récupération depuis la base de données...");
+    const dbFallback = await fetchLatestArticlesFromDatabase();
+    if (dbFallback && dbFallback.length > 0) {
+      return dbFallback;
+    }
+    console.warn("[PRISM] Aucun article en base - retour tableau vide");
+    return [];
   }
 
   const localCachedArticles = getLocalCache(cacheKey);
@@ -1241,7 +1395,22 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
       }
     }
 
-    console.log(`[PRISM 🧠] Cache NOT FOUND for key: ${cacheKey}. Engaging Deep Harvest protocol...`);
+    // --- DEEP HARVEST UNIQUEMENT SUR REFRESH MANUEL ---
+    // Si pas de forceRefresh, on retourne les derniers articles de la BDD au lieu de lancer le Deep Harvest
+    if (!forceRefresh) {
+      console.log(`[PRISM 🔄] Cache miss but no forceRefresh - fetching latest articles from database...`);
+      const latestFromDb = await fetchLatestArticlesFromDatabase();
+      if (latestFromDb && latestFromDb.length > 0) {
+        console.log(`[PRISM ✅] Returning ${latestFromDb.length} cached articles from database (no Deep Harvest)`);
+        saveLocalCache(cacheKey, latestFromDb);
+        return latestFromDb;
+      }
+      // Si vraiment rien en base, on retourne un tableau vide
+      console.warn(`[PRISM ⚠️] No articles in database and no forceRefresh - returning empty array`);
+      return [];
+    }
+
+    console.log(`[PRISM 🧠] Cache NOT FOUND for key: ${cacheKey}. forceRefresh=true → Engaging Deep Harvest protocol...`);
 
     progressTracker.emit({
       phase: 'init',
@@ -1286,13 +1455,13 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
   3. Output MINIFIED JSON (single line) to avoid formatting errors.
   `;
 
-    const executeGeminiCall = async () => {
+    const executeGeminiCall = async (): Promise<{ result: any; model: string }> => {
       const modelsToTry = [
-        "gemini-3-pro-preview",        // NOUVEAU : Modèle Gemini 3 avec capacités de raisonnement
-        "gemini-2.0-flash",            // PRIORITÉ 1 : Meilleur ratio Perf/Coût
-        "gemini-2.0-flash-lite",       // PRIORITÉ 2 : Version light si quotas serrés
-        "gemini-1.5-flash",            // FALLBACK STABLE : L'ancienne valeur sûre
-        "gemini-1.5-flash-8b"          // FALLBACK RAPIDE : Version ultra-light v1.5
+        "gemini-3-pro-preview",        // cf. https://ai.google.dev/gemini-api/docs/models (nov. 2025)
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash"
       ];
 
       for (const modelName of modelsToTry) {
@@ -1310,6 +1479,7 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
           
           // Configuration spécifique pour Gemini 3 et le raisonnement
           const isThinkingModel = modelName.includes("gemini-3");
+          const modelTimeoutMs = resolveGeminiTimeout(modelName);
           const generationConfig: any = {
             ...toolsConfig,
             temperature: 0.3,
@@ -1322,9 +1492,9 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
           };
 
           if (isThinkingModel) {
-            // Activation du mode "Thinking" niveau HIGH pour Gemini 3
+            // Selon la doc Google, un niveau MEDIUM accélère la latence sans perdre la fiabilité
             generationConfig.thinkingConfig = {
-                thinkingLevel: "HIGH"
+                thinkingLevel: "MEDIUM"
             };
           }
 
@@ -1334,8 +1504,8 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
               contents: prompt,
               config: generationConfig,
             }),
-            GEMINI_TIMEOUT_MS,
-            () => console.warn(`[PRISM ⏳] Timeout warning for ${modelName}`)
+            modelTimeoutMs,
+            () => console.warn(`[PRISM ⏳] Timeout warning for ${modelName} après ${modelTimeoutMs / 1000}s`)
           );
 
           console.log(`[PRISM 🤖] Success with ${modelName} in ${(Date.now() - startTime) / 1000}s`);
@@ -1347,7 +1517,7 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
             detail: 'Analyse terminée, traitement des données...',
             metadata: { currentModel: modelName }
           });
-          return result; // Succès, on retourne le résultat
+          return { result, model: modelName }; // Succès, on retourne le résultat
         } catch (error: any) {
           const isModelError = error.message?.includes('404') || error.message?.includes('not found') || error.status === 404;
           if (isModelError) {
@@ -1366,7 +1536,8 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
     };
 
     // Implémentation d'un mécanisme de Retry (3 tentatives)
-    let response;
+    let response: any;
+    let modelUsed: string | null = null;
     let attempts = 0;
     const maxAttempts = 3;
 
@@ -1374,7 +1545,9 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
       try {
         attempts++;
         if (attempts > 1) console.log(`[PRISM] Tentative API ${attempts}/${maxAttempts}...`);
-        response = await executeGeminiCall();
+        const { result, model } = await executeGeminiCall();
+        response = result;
+        modelUsed = model;
         break; // Succès, on sort de la boucle
       } catch (err) {
         console.warn(`[PRISM] Échec tentative ${attempts}:`, err);
@@ -1383,6 +1556,25 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
         await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
       }
     }
+
+    if (!response || !modelUsed) {
+      throw new Error("Gemini n'a retourné aucune réponse exploitable.");
+    }
+
+    Promise.resolve(recordGeminiUsage({
+      model: modelUsed,
+      operation: 'news_deep_harvest',
+      usageMetadata: (response as any)?.usageMetadata,
+      metadata: {
+        cacheKey,
+        query: query ?? null,
+        category: category ?? null,
+        forceRefresh,
+        attemptCount: attempts,
+        firecrawlContextPresent: Boolean(firecrawlContext),
+        firecrawlContextLength: firecrawlContext?.length ?? null,
+      },
+    })).catch((err) => console.warn('[PRISM] AI usage logging (Gemini) failed:', err));
 
     const textResponse = typeof response.text === 'function' ? response.text() : response.text;
 
@@ -1458,7 +1650,7 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
       // Mise à jour de l'analyse de biais avec le score calculé
       const updatedBiasAnalysis = {
         ...article.biasAnalysis,
-        reliabilityScore: calculatedReliability
+        consensusScore: calculatedReliability
       };
 
       const initialComments: UserComment[] = [
@@ -1506,39 +1698,31 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
 
     let articlesToPersist = preparedArticles;
 
-    if (isImagenServiceEnabled()) {
-      try {
-        const imagenService = getImagenService();
-        
-        // Exécution SÉQUENTIELLE pour éviter le 429 (Too Many Requests) sur le modèle d'image Pro
-        const articlesWithImages: NewsArticle[] = [];
-        
-        for (const article of preparedArticles) {
-            try {
-                // Délai de courtoisie entre chaque génération d'image (2s)
-                // Cela ralentit le chargement global mais garantit la qualité 4K sans erreur de quota
-                if (articlesWithImages.length > 0) {
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                }
-
-                const imageUrl = await imagenService.generateCaricature({
-                  prompt: article.imagePrompt,
-                  aspectRatio: "3:4",
-                  id: article.id
-                });
-                articlesWithImages.push({ ...article, imageUrl });
-            } catch (error) {
-                console.error(`Échec génération image pour "${article.headline}":`, error);
-                articlesWithImages.push(article);
-            }
+    const canGenerateHostedImages = isImagenServiceEnabled() && isSupabaseActive();
+    if (canGenerateHostedImages) {
+      const imagenService = getImagenService();
+      const articlesWithImages: NewsArticle[] = [];
+      
+      for (const article of preparedArticles) {
+        if (articlesWithImages.length > 0) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
-        articlesToPersist = articlesWithImages;
-      } catch (error) {
-        console.error("Erreur service Imagen, poursuite avec les cartes sans visuel :", error);
-        articlesToPersist = preparedArticles;
+
+        const imageUrl = await imagenService.generateCaricature({
+          prompt: article.imagePrompt,
+          aspectRatio: "3:4",
+          id: article.id,
+          requireHostedImage: true,
+        });
+        articlesWithImages.push({ ...article, imageUrl });
       }
+      articlesToPersist = articlesWithImages;
     } else {
-      console.warn("[PRISM] Génération d'images désactivée. Les cartes utiliseront le fallback statique.");
+      if (isImagenServiceEnabled()) {
+        console.warn("[PRISM] Supabase inactif, génération d'images ignorée pour garantir la cohérence.");
+      } else {
+        console.warn("[PRISM] Génération d'images désactivée. Les cartes utiliseront le fallback statique.");
+      }
     }
 
     await persistTilesToRepository(articlesToPersist, cacheKey);
@@ -1587,8 +1771,16 @@ const fetchNewsArticles = async (query?: string, category?: string, forceRefresh
       return staleLocal;
     }
 
-    // MOCK DATA FALLBACK FOR DESIGN TESTING
-    return buildStrategicFallbackArticles();
+    // FALLBACK: Récupérer les derniers articles de la base de données
+    const latestFromDb = await fetchLatestArticlesFromDatabase();
+    if (latestFromDb && latestFromDb.length > 0) {
+      console.log("[PRISM 🔄] Using latest articles from database as fallback");
+      return latestFromDb;
+    }
+
+    // Dernier recours absolu: retourner un tableau vide plutôt que des mock data
+    console.warn("[PRISM ⚠️] No fallback data available - returning empty array");
+    return [];
   }
 };
 

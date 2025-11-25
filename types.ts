@@ -8,13 +8,14 @@ export interface Source {
   position: number; // Position on spectrum from 0 (left) to 100 (right)
   coverageSummary: string; // Detailed analysis of the source's angle on the story
   url: string; // Link to the actual article
+  isVerified?: boolean; // True si la source a réellement couvert le sujet (non amplifiée)
 }
 
 export interface BiasAnalysis {
   left: number;
   center: number;
   right: number;
-  reliabilityScore: number;
+  consensusScore: number;
 }
 
 export interface Sentiment {

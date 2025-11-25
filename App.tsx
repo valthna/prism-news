@@ -15,6 +15,7 @@ import HideInterfaceButton from './components/HideInterfaceButton';
 import CategorySelect from './components/CategorySelect';
 import { DEFAULT_CATEGORY } from './constants/categories';
 import { progressTracker, type ProgressUpdate } from './services/progressTracker';
+import PrismLogo from './components/PrismLogo';
 
 const PROGRESS_CAP_BEFORE_COMPLETION = 96;
 const DEFAULT_LOAD_DURATION_MS = 4500;
@@ -120,9 +121,14 @@ const LoadingScreen: React.FC<DetailedLoadingScreenProps> = ({ status, count, de
                 {/* Vortex Animation Container */}
                 <div className="relative w-48 h-48 flex items-center justify-center perspective-[1000px]">
                     {/* Central Core (Singularity) */}
-                    <div className="absolute z-30 w-14 h-14 rounded-full bg-black border border-white/30 flex items-center justify-center shadow-[0_0_60px_rgba(50,173,230,0.3)] animate-pulse ring-1 ring-white/10">
-                        <div className="w-3 h-3 bg-white rounded-full shadow-[0_0_25px_rgba(255,255,255,1)] animate-ping opacity-75"></div>
-                        <div className="absolute inset-0 rounded-full border border-white/10 animate-spin-slow"></div>
+
+                    <div className="absolute z-30 flex items-center justify-center">
+                        <h1
+                            className="text-5xl font-black tracking-tighter italic chromatic-aberration drop-shadow-[0_0_30px_rgba(255,255,255,0.5)]"
+                            data-text="PRISM"
+                        >
+                            PRISM
+                        </h1>
                     </div>
 
                     {/* Vortex Particles */}
@@ -154,15 +160,7 @@ const LoadingScreen: React.FC<DetailedLoadingScreenProps> = ({ status, count, de
                     ))}
                 </div>
 
-                <div className="flex flex-col items-center space-y-3 text-center relative z-30">
-                    <h1
-                        className="text-7xl font-black tracking-tighter italic chromatic-aberration"
-                        data-text="PRISM"
-                    >
-                        PRISM
-                    </h1>
-                    <div className="h-px w-24 bg-gradient-to-r from-transparent via-white/50 to-transparent"></div>
-                </div>
+
 
                 <div className="w-full space-y-4 max-w-[340px]">
                     {/* Status principal */}
@@ -279,7 +277,6 @@ const App: React.FC = () => {
     const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
     const [isSearchLoading, setIsSearchLoading] = useState<boolean>(false);
     const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-    const [isDebateExperienceActive, setIsDebateExperienceActive] = useState<boolean>(false);
 
     // Loading State
     const [loadingStatus, setLoadingStatus] = useState(LOADING_PHASES[0].label);
@@ -332,7 +329,7 @@ const App: React.FC = () => {
     useEffect(() => {
         const unsubscribe = progressTracker.subscribe((update: ProgressUpdate) => {
             console.log('[App] Progress detail update:', update);
-            
+
             if (update.detail) {
                 setLoadingDetail(update.detail);
             }
@@ -521,7 +518,7 @@ const App: React.FC = () => {
 
     useEffect(() => {
         if (hasFetchedRef.current) {
-           return;
+            return;
         }
         hasFetchedRef.current = true;
         getArticles();
@@ -616,13 +613,13 @@ const App: React.FC = () => {
 
             {/* BRANDING HEADER - COMPACT & REMOVED TOP SPACE */}
             <div
-                className={`absolute top-0 left-0 w-full z-50 pointer-events-none flex justify-between items-center bg-gradient-to-b from-black/60 via-black/20 to-transparent h-auto min-h-16 safe-area-x safe-area-top safe-area-bottom transition-opacity duration-300 ${isDebateExperienceActive ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+                className="absolute top-0 left-0 w-full z-50 pointer-events-none flex justify-between items-center bg-gradient-to-b from-black/60 via-black/20 to-transparent h-auto min-h-16 safe-area-x safe-area-top safe-area-bottom transition-opacity duration-300"
                 style={headerPaddingStyle}
             >
                 <div className="pointer-events-auto flex items-center h-full gap-6">
                     <button
                         onClick={() => setIsOnboardingOpen(true)}
-                        className="h-11 px-5 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 backdrop-blur-md transition-all active:scale-95 shadow-sm"
+                        className="h-11 px-5 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/50 backdrop-blur-xl border border-white/10 transition-all active:scale-95"
                         aria-label="À propos de PRISM"
                     >
                         <span
@@ -644,7 +641,7 @@ const App: React.FC = () => {
                     <button
                         onClick={() => setIsSearchOpen(true)}
                         disabled={isSearchLoading}
-                        className="flex items-center justify-center w-11 h-11 rounded-full bg-white/5 hover:bg-white/10 backdrop-blur-md transition-all active:scale-95"
+                        className="flex items-center justify-center w-11 h-11 rounded-full bg-black/40 hover:bg-black/50 backdrop-blur-xl border border-white/10 transition-all active:scale-95"
                         aria-label="Rechercher"
                         aria-busy={isSearchLoading}
                     >
@@ -675,14 +672,14 @@ const App: React.FC = () => {
                     <button
                         onClick={handleRefresh}
                         disabled={isRefreshing}
-                        className="flex items-center justify-center w-11 h-11 rounded-full bg-white/5 hover:bg-white/10 backdrop-blur-md transition-all active:scale-95"
+                        className="flex items-center justify-center w-11 h-11 rounded-full bg-black/40 hover:bg-black/50 backdrop-blur-xl border border-white/10 transition-all active:scale-95"
                         aria-label="Actualiser les sujets"
                     >
                         <RefreshIcon className={`w-5 h-5 text-white/90 group-hover:text-white transition-colors ${isRefreshing ? 'animate-spin text-white' : 'group-hover:animate-spin'}`} strokeWidth={2} />
                     </button>
                     <button
                         onClick={() => setIsSettingsOpen(true)}
-                        className="flex items-center justify-center w-11 h-11 rounded-full bg-white/5 hover:bg-white/10 backdrop-blur-md transition-all active:scale-95 group"
+                        className="flex items-center justify-center w-11 h-11 rounded-full bg-black/40 hover:bg-black/50 backdrop-blur-xl border border-white/10 transition-all active:scale-95 group"
                         aria-label="Paramètres"
                     >
                         <SettingsIcon className="w-5 h-5 text-white/90 group-hover:text-white transition-colors group-hover:rotate-90 duration-500" strokeWidth={2} />
@@ -704,7 +701,6 @@ const App: React.FC = () => {
                         isInterfaceHidden={isInterfaceHidden}
                         selectedCategory={currentCategory}
                         onCategoryFilterChange={handleCategoryFilterChange}
-                        onDebateVisibilityChange={setIsDebateExperienceActive}
                     />
                 ))}
                 {articles.length === 0 && !loading && (

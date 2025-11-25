@@ -165,17 +165,24 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClose }) =>
 
                 {/* Footer Navigation */}
                 <div className="mt-auto flex flex-col items-center space-y-4">
-                    {/* Dots */}
-                    <div className="flex items-center gap-1.5" role="tablist">
+                    {/* Dots - using inline styles to ensure correct sizing */}
+                    <div className="flex items-center justify-center" style={{ gap: '6px' }} role="tablist">
                         {slides.map((_, idx) => (
                             <button
                                 key={idx}
                                 onClick={() => { if (!isAnimating) { hapticTap(); setCurrentSlide(idx); }}}
                                 role="tab"
                                 aria-selected={idx === currentSlide}
-                                className={`h-1.5 rounded-full transition-all duration-200 ${
-                                    idx === currentSlide ? 'w-5 bg-white' : 'w-1.5 bg-white/30'
-                                }`}
+                                style={{
+                                    width: idx === currentSlide ? '20px' : '6px',
+                                    height: '6px',
+                                    borderRadius: '3px',
+                                    backgroundColor: idx === currentSlide ? 'white' : 'rgba(255,255,255,0.3)',
+                                    transition: 'all 0.2s ease',
+                                    border: 'none',
+                                    padding: 0,
+                                    cursor: 'pointer'
+                                }}
                             />
                         ))}
                     </div>

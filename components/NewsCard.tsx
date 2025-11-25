@@ -309,26 +309,19 @@ const NewsCard: React.FC<NewsCardProps> = ({
   const isLive = article.publishedAt?.toUpperCase().includes('DIRECT') || article.publishedAt?.toUpperCase().includes('LIVE');
   const displayDate = article.publishedAt || "RÉCENT";
   
-  // Filtrer pour n'utiliser que les sources vérifiées (qui ont réellement traité le sujet)
-  // Détecte aussi les sources "amplifiées" par leurs coverageSummary génériques
+  // Sources vérifiées - on garde toutes les sources sauf si explicitement non vérifiées
+  // Un article doit TOUJOURS avoir des sources affichées
   const verifiedSources = useMemo(() => {
-    // Patterns typiques des sources amplifiées (générées automatiquement)
-    const genericPatterns = [
-      /^(décryptage|perspective|contre-enquête|couverture|synthèse|fil d'actualité|lecture|traitement|données|étude|position)/i,
-      /\b(par le monde|du guardian|de mediapart|de libération|de l'humanité|de vox|de reuters|associated press|de l'afp|bbc de|de politico|d'axios|par le figaro|du wall street journal|de les échos|the economist|de fox news|new york post|de l'oms|de la banque mondiale|de l'ocde|de l'onu)\b/i,
-      / (sur|autour de|concernant|appliquée? à|liée? à|au sujet de|portant sur|consacrée? à) .{5,}\.$/i
-    ];
+    const sources = article.sources || [];
     
-    return (article.sources || []).filter(s => {
-      // Si explicitement marqué comme non vérifié, filtrer
-      if (s.isVerified === false) return false;
-      // Si explicitement marqué comme vérifié, garder
-      if (s.isVerified === true) return true;
-      // Pour les anciennes données sans le champ, détecter les patterns génériques
-      const summary = s.coverageSummary || '';
-      const isGeneric = genericPatterns.some(pattern => pattern.test(summary));
-      return !isGeneric;
-    });
+    // Si pas de sources, retourner vide (ne devrait pas arriver)
+    if (sources.length === 0) return [];
+    
+    // Filtrer uniquement les sources explicitement non vérifiées
+    const filtered = sources.filter(s => s.isVerified !== false);
+    
+    // IMPORTANT: Ne jamais retourner 0 sources - garder les originales si tout filtré
+    return filtered.length > 0 ? filtered : sources;
   }, [article.sources]);
   
   // Calcul du consensus avec fallback si score invalide ou absent

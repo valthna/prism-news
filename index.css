@@ -3,6 +3,47 @@
 @tailwind utilities;
 
 /* ======================================
+   PWA / iOS SAFE AREA - Full screen coverage
+   ====================================== */
+
+html {
+  background-color: #000000;
+}
+
+body {
+  background-color: #000000;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+#root {
+  background-color: #000000;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* iOS PWA standalone mode - extend app to fill safe area */
+@media all and (display-mode: standalone) {
+  html, body, #root {
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+    background-color: #000000;
+  }
+}
+
+/* PWA container that extends into safe areas */
+.pwa-safe-container {
+  /* Extend bottom edge into the safe area (home indicator zone) */
+  bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
+  /* Add padding to keep content above the safe area */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ======================================
    ACCESSIBILITÉ
    ====================================== */
 

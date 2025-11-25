@@ -659,7 +659,7 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black text-white overflow-hidden font-sans selection:bg-neon-accent selection:text-black">
+        <div className="fixed inset-0 bg-black text-white overflow-hidden font-sans selection:bg-neon-accent selection:text-black pwa-safe-container">
             {/* Skip link pour l'accessibilité clavier */}
             <a 
                 href="#main-content" 
